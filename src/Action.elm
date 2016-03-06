@@ -17,6 +17,9 @@ type alias Model
     , messages: List Message
     }
 
+-- do we need to seperate into ServerRequest and ServerResponse?
+-- that way clients can do optimisitic updates
+
 type Action
   = Error String
   | Connect Id
@@ -39,8 +42,12 @@ update action model =
     Init id model -> model
     Post message -> { model | messages = message :: model.messages }
 
-encode : Action -> Encode.Value
-encode action =
+encode : (List Action) -> Encode.Value
+encode actions =
+  Encode.list (List.map encodeAction actions)
+
+encodeAction : Action -> Encode.Value
+encodeAction action =
   case action of
     Error message ->
       Encode.object
@@ -75,10 +82,16 @@ encode action =
         , ("message", Encode.string message)
         ]
 
-decode : Decode.Value -> Action
-decode =
-  Decode.decodeValue (("type" := Decode.string) `Decode.andThen` actionInfo)
-    >> extract (\e -> Error e)
+decode : Decode.Value -> (List Action)
+decode value =
+  extract (\e -> [ Error e ]) (Decode.decodeValue decodeActionList value)
+
+decodeActionList : Decoder (List Action)
+decodeActionList = Decode.list decodeAction
+
+decodeAction : Decoder Action
+decodeAction =
+  ("type" := Decode.string) `Decode.andThen` actionInfo
 
 decodeModel : Decoder Model
 decodeModel =

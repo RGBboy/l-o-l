@@ -12,8 +12,8 @@ import Debug
 -- Need to set this up to use a JSON decoder to translate to Action types
 port input : Signal Decode.Value
 
-actionSignal : Signal Action
-actionSignal =
+actionsSignal : Signal (List Action)
+actionsSignal =
   Signal.map Action.decode input
 
 -- need a way to remove actions from this list as they are sent
@@ -25,8 +25,8 @@ actionSignal =
 isConnect : Action -> Bool
 isConnect action =
   case action of
-    Action.Connect id -> False
-    _ -> True
+    Action.Connect id -> True
+    _ -> False
 
 connectToInit : Action.Model -> Action -> Action
 connectToInit model action =
@@ -34,16 +34,24 @@ connectToInit model action =
     Action.Connect id -> Action.Init id model
     a -> a
 
+connectToInits : Action.Model -> (List Action) -> (List Action)
+connectToInits model =
+  List.map (connectToInit model)
+
+update : (List Action) -> Action.Model -> Action.Model
+update actions model =
+  List.foldl Action.update model actions
+
 modelSignal : Signal Action.Model
 modelSignal =
-  Signal.foldp Action.update Action.init actionSignal
+  Signal.foldp update Action.init actionsSignal
 
-noState : Action
-noState = (Action.Init "" Action.init)
+connectsSignal : Signal (List Action)
+connectsSignal =
+  Signal.map (List.filter isConnect) actionsSignal
 
-initSignal : Signal Action
-initSignal = Signal.filter isConnect noState (Signal.map2 connectToInit modelSignal actionSignal)
-
+initSignal : Signal (List Action)
+initSignal = Signal.map2 connectToInits modelSignal connectsSignal
 
 -- Output port of actions to a client
 -- Need to set this up to use a JSON encoder to translate to Action types
@@ -51,4 +59,4 @@ port outputOne : Signal Encode.Value
 port outputOne = Signal.map Action.encode initSignal
 
 port outputAll : Signal Encode.Value
-port outputAll = Signal.map Action.encode actionSignal
+port outputAll = Signal.map Action.encode actionsSignal

@@ -1,18 +1,85 @@
-module Client where
-
-import Signal exposing (Signal)
-import Action exposing (Action)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Html as H exposing (Html)
+import Html.App as Html
 import Html.Attributes as A
-import Html.Events as E exposing (onClick)
-import Debug
-import Set exposing (Set)
-import Effects exposing (Effects)
-import Task exposing (Task)
+import Html.Events as E
+import Json.Decode as Json
+import WebSocket
 
-connectionView : Action.Id -> Html
+
+
+main =
+  Html.program
+    { init = init
+    , view = view
+    , update = update
+    , subscriptions = subscriptions
+    }
+
+
+echoServer : String
+echoServer =
+  "ws://echo.websocket.org"
+
+
+
+-- MODEL
+
+type alias User = String
+
+type alias Model =
+  { input: String
+  , messages: List String
+  , connections: List String
+  }
+
+init : (Model, Cmd Msg)
+init =
+  ( { input = ""
+    , messages = []
+    , connections = []
+    }
+  , Cmd.none
+  )
+
+-- UPDATE
+
+
+type Msg
+  = Input String
+  | Send
+  | NewMessage String
+
+
+update : Msg -> Model -> (Model, Cmd Msg)
+update message model =
+  case message of
+    Input value ->
+      ( { model | input = value }
+      , Cmd.none
+      )
+    Send ->
+      ( { model | input = "" }
+      , WebSocket.send echoServer model.input
+      )
+    NewMessage message ->
+      ( { model | messages = message :: model.messages }
+      , Cmd.none
+      )
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+  WebSocket.listen echoServer NewMessage
+
+
+
+-- VIEW
+
+connectionView : String -> Html Msg
 connectionView id =
   H.div []
     [ H.span []
@@ -20,14 +87,11 @@ connectionView id =
         ]
     ]
 
-connectionsView : Action.Model -> Html
-connectionsView model =
-  let
-    connections = List.map connectionView (Set.toList model.connections)
-  in
-    H.div [] connections
+connectionsView : List String -> Html Msg
+connectionsView connections =
+  H.div [] (List.map connectionView connections)
 
-messageView : Action.Message -> Html
+messageView : String -> Html Msg
 messageView message =
   H.div []
     [ H.span []
@@ -35,153 +99,35 @@ messageView message =
         ]
     ]
 
-messagesView : Action.Model -> Html
-messagesView model =
-  let
-    messages = List.map messageView model.messages
-  in
-    H.div [] messages
+messagesView : List String -> Html Msg
+messagesView messages =
+  H.div [] (List.map messageView messages)
 
-onEnter : Signal.Address a -> a -> H.Attribute
-onEnter address value =
+onEnter : Msg -> H.Attribute Msg
+onEnter message =
     E.on "keydown"
-      (Decode.customDecoder E.keyCode is13)
-      (\_ -> Signal.message address value)
+      (Json.map
+        (always message)
+        (Json.customDecoder E.keyCode is13)
+      )
 
 is13 : Int -> Result String ()
 is13 code =
   if code == 13 then Ok () else Err "not the right key code"
 
-view : Signal.Address ClientAction -> Model -> Html
-view address model =
+view : Model -> Html Msg
+view model =
   H.div []
     [ H.h1 []
         [ H.text "Network Experiment"
         ]
-    , connectionsView model.network
-    , messagesView model.network
+    , connectionsView model.connections
+    , messagesView model.messages
     , H.input
         [ A.placeholder "Message..."
         , A.value model.input
-        , E.on "input" E.targetValue (Signal.message address << Input)
-        , onEnter address Submit
+        , E.onInput Input
+        , onEnter Send
         ]
         []
     ]
-
-type ClientAction
-  = Input String
-  | Submit
-  | Network Action
-  | Noop
-
-type alias Model =
-  { input: String
-  , network: Action.Model
-  }
-
-init : (Model, Effects ClientAction)
-init =
-  ( { input = ""
-    , network = Action.init
-    }
-  , Effects.none
-  )
-
---SubmitPost : Task Never a -> Effects a
-
-updateModel : ClientAction -> Model -> (Model, Effects ClientAction)
-updateModel clientAction model =
-  case clientAction of
-    Input value ->
-      ( { model | input = value }
-      , Effects.none
-      )
-    Submit ->
-      ( { model | input = "" }
-      , Effects.task (Task.succeed (Network (Action.Post model.input)))
-      )
-    Network action ->
-      ( { model | network = Action.update action model.network }
-      , Effects.none
-      )
-    _ -> (model, Effects.none)
-
--- Input port of actions from a client
--- Need to set this up to use a JSON decoder to translate to Action types
-port input : Signal Decode.Value
-
-networkActionInput : Signal (List ClientAction)
-networkActionInput =
-  Signal.map (Action.decode >> (Debug.log "action input") >> (List.map Network) ) input
-
--- mailbox : Signal.Mailbox ClientAction
--- mailbox =
--- -- ideally we should be able to have no value to start (can we with ()?)
---   Signal.mailbox Noop
-
-toActions : List ClientAction -> List Action
-toActions actions =
-  case actions of
-    hd :: tl ->
-      case hd of
-        Network action -> action :: toActions tl
-        _ -> toActions tl
-    [] -> []
-
-isNotNetworkAction : ClientAction -> Bool
-isNotNetworkAction action =
-  case action of
-    Network action -> False
-    _ -> True
-
-singleton : ClientAction -> (List ClientAction)
-singleton action = [ action ]
-
-messages : Signal.Mailbox (List ClientAction)
-messages =
-  Signal.mailbox []
-
-address : Signal.Address ClientAction
-address =
-  Signal.forwardTo messages.address singleton
-
-updateStep : ClientAction -> (Model, Effects ClientAction) -> (Model, Effects ClientAction)
-updateStep action (oldModel, accumulatedEffects) =
-  let
-    (newModel, additionalEffects) = updateModel action oldModel
-  in
-    (newModel, Effects.batch [accumulatedEffects, additionalEffects])
-
-update : List ClientAction -> (Model, Effects ClientAction) -> (Model, Effects ClientAction)
-update actions (model, _) =
-  List.foldl updateStep (model, Effects.none) actions
-
-inputs : Signal (List ClientAction)
-inputs =
-  Signal.mergeMany (messages.signal :: [networkActionInput])
-
-effectsAndModel : Signal (Model, Effects ClientAction)
-effectsAndModel =
-  Signal.foldp update init inputs
-  -- Signal.foldp update init (Signal.merge (Signal.filter isNotNetworkAction Noop mailbox.signal) networkActionInput)
-
-model : Signal Model
-model =
-  Signal.map fst effectsAndModel
-
-networkActionOutput : Signal (List Action)
-networkActionOutput =
-  Signal.filter (not << List.isEmpty) [] (Signal.map toActions messages.signal)
-
--- Output port of actions to a client
-port output : Signal Encode.Value
-port output =
-  Signal.map Action.encode networkActionOutput
-
-port tasks : Signal (Task Effects.Never ())
-port tasks =
-  Signal.map (Effects.toTask messages.address << snd) effectsAndModel
-
-main : Signal Html
-main = Signal.map (view (Signal.forwardTo messages.address singleton)) model

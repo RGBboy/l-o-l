@@ -1,15 +1,16 @@
 {
-  "name": "network",
+  "name": "elm-network",
   "version": "1.0.0",
-  "description": "Networking Elm",
+  "description": "Networking Experiments with Elm",
   "author": "RGBboy",
+  "private": true,
   "main": "./lib/server",
   "scripts": {
     "start": "node ./lib/server",
     "bundle": "browserify ./lib/client.js -o ./public/client.js",
     "build": "npm run build:client && npm run build:server && npm run bundle",
-    "build:client": "elm-make ./src/Client.elm --output ./public/elm.js",
-    "build:server": "elm-make ./src/Server.elm --output ./build/server.js && echo \"module.exports = Elm;\" >> ./build/server.js",
+    "build:client": "elm-make ./src/Client.elm --output ./build/client.js",
+    "build:server": "elm-make ./src/Server.elm --output ./build/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

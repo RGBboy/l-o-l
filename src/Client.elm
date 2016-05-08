@@ -18,7 +18,7 @@ main =
 
 echoServer : String
 echoServer =
-  "ws://echo.websocket.org"
+  "ws://localhost:8080"
 
 
 

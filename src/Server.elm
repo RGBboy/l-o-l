@@ -1,62 +1,52 @@
-module Server where
+port module Server exposing (..)
 
-import Signal exposing (Signal)
-import Action exposing (Action)
+import Html exposing (Html)
+import Html.App as App
 
 import Json.Decode as Decode
 import Json.Encode as Encode
 
 import Debug
 
--- Input port of actions from a client
--- Need to set this up to use a JSON decoder to translate to Action types
-port input : Signal Decode.Value
+main : Program Never
+main =
+  App.program
+    { init = init
+    , view = view
+    , update = update
+    , subscriptions = subscriptions
+    }
 
-actionsSignal : Signal (List Action)
-actionsSignal =
-  Signal.map Action.decode input
+-- View
 
--- need a way to remove actions from this list as they are sent
--- need a way to limit actions to a given time and make up missing ones
--- store : Game.Action -> List Game.Action -> List Game.Action
--- store action actions =
-  -- action :: actions
+-- hack for server program to work
+view : Model -> Html Msg
+view = always (Html.text "")
 
-isConnect : Action -> Bool
-isConnect action =
+-- Model
+
+type alias Model = List String
+
+init : (Model, Cmd Msg)
+init =
+  ([], Cmd.none)
+
+-- Update
+
+type Msg
+  = Echo String
+
+port output : String -> Cmd msg
+
+update : Msg -> Model -> (Model, Cmd Msg)
+update action model =
   case action of
-    Action.Connect id -> True
-    _ -> False
+    Echo message ->
+      ( (message :: model), output message )
 
-connectToInit : Action.Model -> Action -> Action
-connectToInit model action =
-  case action of
-    Action.Connect id -> Action.Init id model
-    a -> a
+-- Input port of messages from clients
+port input : (String -> msg) -> Sub msg
 
-connectToInits : Action.Model -> (List Action) -> (List Action)
-connectToInits model =
-  List.map (connectToInit model)
-
-update : (List Action) -> Action.Model -> Action.Model
-update actions model =
-  List.foldl Action.update model actions
-
-modelSignal : Signal Action.Model
-modelSignal =
-  Signal.foldp update Action.init actionsSignal
-
-connectsSignal : Signal (List Action)
-connectsSignal =
-  Signal.map (List.filter isConnect) actionsSignal
-
-initSignal : Signal (List Action)
-initSignal = Signal.map2 connectToInits modelSignal connectsSignal
-
--- Output port of actions to a client
--- Need to set this up to use a JSON encoder to translate to Action types
-port outputOne : Signal Encode.Value
-port outputOne = Signal.map Action.encode initSignal
-
-port outputAll : Signal Encode.Value
-port outputAll = Signal.map Action.encode actionsSignal
+subscriptions : Model -> Sub Msg
+subscriptions model =
+  input Echo

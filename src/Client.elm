@@ -2,10 +2,15 @@ import Html as H exposing (Html)
 import Html.App as Html
 import Html.Attributes as A
 import Html.Events as E
-import Json.Decode as Json
 import WebSocket
 
+import Set exposing (Set)
 
+import Json.Decode as Decode exposing (Decoder, (:=))
+import Json.Decode.Extra
+import Json.Encode as Encode
+
+(|:) = Json.Decode.Extra.apply
 
 main =
   Html.program
@@ -16,8 +21,8 @@ main =
     }
 
 
-echoServer : String
-echoServer =
+server : String
+server =
   "ws://localhost:8080"
 
 
@@ -29,25 +34,26 @@ type alias User = String
 type alias Model =
   { input: String
   , messages: List String
-  , connections: List String
+  , connections: Set String
   }
 
 init : (Model, Cmd Msg)
 init =
   ( { input = ""
     , messages = []
-    , connections = []
+    , connections = Set.empty
     }
   , Cmd.none
   )
 
 -- UPDATE
 
-
 type Msg
   = Input String
   | Send
-  | NewMessage String
+  | Error
+  | Connection String
+  | Message String
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -59,21 +65,24 @@ update message model =
       )
     Send ->
       ( { model | input = "" }
-      , WebSocket.send echoServer model.input
+      , WebSocket.send server model.input
       )
-    NewMessage message ->
+    Error -> (model, Cmd.none)
+    Connection id ->
+      ( { model | connections = Set.insert id model.connections }
+      , Cmd.none
+      )
+    Message message ->
       ( { model | messages = message :: model.messages }
       , Cmd.none
       )
 
 
-
 -- SUBSCRIPTIONS
-
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  WebSocket.listen echoServer NewMessage
+  WebSocket.listen server Message
 
 
 
@@ -87,9 +96,9 @@ connectionView id =
         ]
     ]
 
-connectionsView : List String -> Html Msg
+connectionsView : Set String -> Html Msg
 connectionsView connections =
-  H.div [] (List.map connectionView connections)
+  H.div [] (List.map connectionView (Set.toList connections))
 
 messageView : String -> Html Msg
 messageView message =
@@ -106,9 +115,9 @@ messagesView messages =
 onEnter : Msg -> H.Attribute Msg
 onEnter message =
     E.on "keydown"
-      (Json.map
+      (Decode.map
         (always message)
-        (Json.customDecoder E.keyCode is13)
+        (Decode.customDecoder E.keyCode is13)
       )
 
 is13 : Int -> Result String ()

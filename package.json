@@ -1,7 +1,7 @@
 {
-  "name": "elm-network",
+  "name": "elm-chat",
   "version": "1.0.0",
-  "description": "Networking Experiments with Elm",
+  "description": "Full stack chat with Elm and Node.js",
   "author": "RGBboy",
   "private": true,
   "main": "./lib/server",

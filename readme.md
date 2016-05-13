@@ -1,3 +1,3 @@
-# Network Experiment
+# Elm Chat
 
-Networking Experiments with Elm
+Full stack chat with Elm and Node.js

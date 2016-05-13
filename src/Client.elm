@@ -65,9 +65,8 @@ update message model =
       )
     Send ->
       ( { model | input = "" }
-      , WebSocket.send server model.input
+      ,  WebSocket.send server (encode (Message model.input))
       )
-    Error -> (model, Cmd.none)
     Connection id ->
       ( { model | connections = Set.insert id model.connections }
       , Cmd.none
@@ -76,13 +75,51 @@ update message model =
       ( { model | messages = message :: model.messages }
       , Cmd.none
       )
+    _ -> (model, Cmd.none)
 
 
 -- SUBSCRIPTIONS
 
+encode : Msg -> String
+encode = encodeMsg >> (Encode.encode 2)
+
+encodeMsg : Msg -> Encode.Value
+encodeMsg msg =
+  case msg of
+    Connection id ->
+      Encode.object
+        [ ("type", Encode.string "Connection")
+        , ("id", Encode.string id)
+        ]
+    Message message ->
+      Encode.object
+        [ ("type", Encode.string "Message")
+        , ("message", Encode.string message)
+        ]
+    _ -> Encode.null
+
+decode : String -> Msg
+decode value =
+  Result.withDefault Error (Decode.decodeString decodeMsg value)
+
+decodeMsg : Decoder Msg
+decodeMsg =
+  ("type" := Decode.string) `Decode.andThen` decodeMsgType
+
+decodeMsgType : String -> Decoder Msg
+decodeMsgType kind =
+  case kind of
+    "Connection" ->
+      Decode.succeed Connection
+        |: ("id" := Decode.string)
+    "Message" ->
+      Decode.succeed Message
+        |: ("message" := Decode.string)
+    _ -> Decode.succeed Error
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  WebSocket.listen server Message
+  WebSocket.listen server decode
 
 
 

@@ -5,6 +5,8 @@ import Set exposing (Set)
 import Html exposing (Html)
 import Html.App as App
 
+import Debug
+
 import Json.Decode as Decode exposing (Decoder, (:=))
 import Json.Decode.Extra
 import Json.Encode as Encode
@@ -52,7 +54,6 @@ type Msg
 encode : Msg -> Encode.Value
 encode msg =
   case msg of
-    Error -> Encode.null
     Connection id ->
       Encode.object
         [ ("type", Encode.string "Connection")
@@ -63,6 +64,7 @@ encode msg =
         [ ("type", Encode.string "Message")
         , ("message", Encode.string message)
         ]
+    _ -> Encode.null
 
 port output : Encode.Value -> Cmd msg
 
@@ -101,4 +103,7 @@ port input : (Decode.Value -> msg) -> Sub msg
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  input decode
+  let
+    model = Debug.log "Model" model
+  in
+    input decode

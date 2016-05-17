@@ -53,6 +53,7 @@ type Msg
   | Send
   | Error
   | Connection String
+  | Disconnection String
   | Message String
 
 
@@ -69,6 +70,10 @@ update message model =
       )
     Connection id ->
       ( { model | connections = Set.insert id model.connections }
+      , Cmd.none
+      )
+    Disconnection id ->
+      ( { model | connections = Set.remove id model.connections }
       , Cmd.none
       )
     Message message ->
@@ -91,6 +96,11 @@ encodeMsg msg =
         [ ("type", Encode.string "Connection")
         , ("id", Encode.string id)
         ]
+    Disconnection id ->
+      Encode.object
+        [ ("type", Encode.string "Disconnection")
+        , ("id", Encode.string id)
+        ]
     Message message ->
       Encode.object
         [ ("type", Encode.string "Message")
@@ -111,6 +121,9 @@ decodeMsgType kind =
   case kind of
     "Connection" ->
       Decode.succeed Connection
+        |: ("id" := Decode.string)
+    "Disconnection" ->
+      Decode.succeed Disconnection
         |: ("id" := Decode.string)
     "Message" ->
       Decode.succeed Message
@@ -135,7 +148,15 @@ connectionView id =
 
 connectionsView : Set String -> Html Msg
 connectionsView connections =
-  H.div [] (List.map connectionView (Set.toList connections))
+  H.div []
+    [ H.div []
+        [ H.h2 []
+            [ H.text "Connections"
+            ]
+        ]
+    , H.div []
+        (List.map connectionView (Set.toList connections))
+    ]
 
 messageView : String -> Html Msg
 messageView message =
@@ -147,7 +168,15 @@ messageView message =
 
 messagesView : List String -> Html Msg
 messagesView messages =
-  H.div [] (List.map messageView messages)
+  H.div []
+    [ H.div []
+        [ H.h2 []
+            [ H.text "Messages"
+            ]
+        ]
+    , H.div []
+        (List.map messageView messages)
+    ]
 
 onEnter : Msg -> H.Attribute Msg
 onEnter message =

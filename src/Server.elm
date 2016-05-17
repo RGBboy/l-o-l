@@ -49,6 +49,7 @@ init =
 type Msg
   = Error
   | Connection String
+  | Disconnection String
   | Message String
 
 encode : Msg -> Encode.Value
@@ -57,6 +58,11 @@ encode msg =
     Connection id ->
       Encode.object
         [ ("type", Encode.string "Connection")
+        , ("id", Encode.string id)
+        ]
+    Disconnection id ->
+      Encode.object
+        [ ("type", Encode.string "Disconnection")
         , ("id", Encode.string id)
         ]
     Message message ->
@@ -74,10 +80,16 @@ update msg model =
     Error -> (model, Cmd.none)
     Connection id ->
       ( { model | connections = Set.insert id model.connections }
-      , output (encode msg) )
+      , output (encode msg)
+      )
+    Disconnection id ->
+      ( { model | connections = Set.remove id model.connections }
+      , output (encode msg)
+      )
     Message message ->
       ( { model | messages = message :: model.messages }
-      , output (encode msg) )
+      , output (encode msg)
+      )
 
 decode : Decode.Value -> Msg
 decode value =
@@ -92,6 +104,9 @@ decodeMsgType kind =
   case kind of
     "Connection" ->
       Decode.succeed Connection
+        |: ("id" := Decode.string)
+    "Disconnection" ->
+      Decode.succeed Disconnection
         |: ("id" := Decode.string)
     "Message" ->
       Decode.succeed Message

@@ -37,6 +37,11 @@ type alias Model =
   , connections: Set String
   }
 
+type alias ServerModel =
+  { messages: List String
+  , connections: Set String
+  }
+
 init : (Model, Cmd Msg)
 init =
   ( { input = ""
@@ -52,6 +57,7 @@ type Msg
   = Input String
   | Send
   | Error
+  | Init ServerModel
   | Connection String
   | Disconnection String
   | Message String
@@ -67,6 +73,13 @@ update message model =
     Send ->
       ( { model | input = "" }
       ,  WebSocket.send server (encode (Message model.input))
+      )
+    Init init ->
+      ( { model
+        | connections = init.connections
+        , messages = init.messages
+        }
+      , Cmd.none
       )
     Connection id ->
       ( { model | connections = Set.insert id model.connections }
@@ -119,6 +132,11 @@ decodeMsg =
 decodeMsgType : String -> Decoder Msg
 decodeMsgType kind =
   case kind of
+    "Init" ->
+      Decode.map Init
+        (Decode.object2 ServerModel
+          ("messages" := (Decode.list Decode.string))
+          ("connections" := Decode.map Set.fromList (Decode.list Decode.string)))
     "Connection" ->
       Decode.succeed Connection
         |: ("id" := Decode.string)

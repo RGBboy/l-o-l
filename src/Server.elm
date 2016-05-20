@@ -48,13 +48,20 @@ init =
 
 type Msg
   = Error
+  | Init Model
   | Connection String
   | Disconnection String
   | Message String
 
-encode : Msg -> Encode.Value
-encode msg =
+encodeMsg : Msg -> Encode.Value
+encodeMsg msg =
   case msg of
+    Init model ->
+      Encode.object
+        [ ("type", Encode.string "Init")
+        , ("connections", Encode.list (List.map Encode.string (Set.toList model.connections)) )
+        , ("messages", Encode.list (List.map Encode.string model.messages) )
+        ]
     Connection id ->
       Encode.object
         [ ("type", Encode.string "Connection")
@@ -72,24 +79,49 @@ encode msg =
         ]
     _ -> Encode.null
 
+encodeAddressedMsg : String -> Msg -> Encode.Value
+encodeAddressedMsg id msg =
+  Encode.object
+    [ ("to", Encode.string id)
+    , ("data", encodeMsg msg)
+    ]
+
 port output : Encode.Value -> Cmd msg
+
+-- Tag a command with who it is for?
+sendToOne : Msg -> String -> Cmd msg
+sendToOne msg id =
+  output (encodeAddressedMsg id msg)
+
+sendToMany : Msg -> List String -> Cmd msg
+sendToMany msg ids =
+  Cmd.batch (List.map (sendToOne msg) ids)
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-    Error -> (model, Cmd.none)
     Connection id ->
-      ( { model | connections = Set.insert id model.connections }
-      , output (encode msg)
-      )
+      let
+        newModel = { model | connections = Set.insert id model.connections }
+      in
+        ( newModel
+        , Cmd.batch
+          [ sendToOne (Init newModel) id
+          , sendToMany msg (Set.toList model.connections)
+          ]
+        )
     Disconnection id ->
-      ( { model | connections = Set.remove id model.connections }
-      , output (encode msg)
-      )
+      let
+        connections = Set.remove id model.connections
+      in
+        ( { model | connections = connections }
+        , sendToMany msg (Set.toList connections)
+        )
     Message message ->
       ( { model | messages = message :: model.messages }
-      , output (encode msg)
+      , sendToMany msg (Set.toList model.connections)
       )
+    _ -> (model, Cmd.none)
 
 decode : Decode.Value -> Msg
 decode value =

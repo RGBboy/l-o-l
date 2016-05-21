@@ -5,15 +5,9 @@ import Set exposing (Set)
 import Html exposing (Html)
 import Html.App as App
 
-import Debug
-
 import Json.Decode as Decode exposing (Decoder, (:=))
-import Json.Decode.Extra
+import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
-
-(|:) = Json.Decode.Extra.apply
-
--- import Debug
 
 main : Program Never
 main =
@@ -123,27 +117,27 @@ update msg model =
       )
     _ -> (model, Cmd.none)
 
-decode : Decode.Value -> Msg
-decode value =
-  Result.withDefault Error (Decode.decodeValue decodeMsg value)
+decodeInput : Decode.Value -> Msg
+decodeInput value =
+  Result.withDefault Error (Decode.decodeValue msgDecoder value)
 
-decodeMsg : Decoder Msg
-decodeMsg =
-  ("type" := Decode.string) `Decode.andThen` decodeMsgType
+msgDecoder : Decoder Msg
+msgDecoder =
+  ("type" := Decode.string) `Decode.andThen` msgTypeDecoder
 
-decodeMsgType : String -> Decoder Msg
-decodeMsgType kind =
+msgTypeDecoder : String -> Decoder Msg
+msgTypeDecoder kind =
   case kind of
     "Connection" ->
-      Decode.succeed Connection
-        |: ("id" := Decode.string)
+      decode Connection
+        |> required "id" Decode.string
     "Disconnection" ->
-      Decode.succeed Disconnection
-        |: ("id" := Decode.string)
+      decode Disconnection
+        |> required "id" Decode.string
     "Message" ->
-      Decode.succeed Message
-        |: ("message" := Decode.string)
-    _ -> Decode.succeed Error
+      decode Message
+        |> required "message" Decode.string
+    _ -> decode Error
 
 -- Input port of messages from clients
 port input : (Decode.Value -> msg) -> Sub msg
@@ -153,4 +147,4 @@ subscriptions model =
   let
     model = Debug.log "Model" model
   in
-    input decode
+    input decodeInput

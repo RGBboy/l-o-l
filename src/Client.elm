@@ -7,10 +7,8 @@ import WebSocket
 import Set exposing (Set)
 
 import Json.Decode as Decode exposing (Decoder, (:=))
-import Json.Decode.Extra
+import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
-
-(|:) = Json.Decode.Extra.apply
 
 main =
   Html.program
@@ -111,36 +109,36 @@ encodeMsg msg =
         ]
     _ -> Encode.null
 
-decode : String -> Msg
-decode value =
-  Result.withDefault Error (Decode.decodeString decodeMsg value)
+decodeInput : String -> Msg
+decodeInput value =
+  Result.withDefault Error (Decode.decodeString msgDecoder value)
 
-decodeMsg : Decoder Msg
-decodeMsg =
-  ("type" := Decode.string) `Decode.andThen` decodeMsgType
+msgDecoder : Decoder Msg
+msgDecoder =
+  ("type" := Decode.string) `Decode.andThen` msgTypeDecoder
 
-decodeMsgType : String -> Decoder Msg
-decodeMsgType kind =
+msgTypeDecoder : String -> Decoder Msg
+msgTypeDecoder kind =
   case kind of
     "Init" ->
       Decode.map Init
-        (Decode.object2 ServerModel
-          ("messages" := (Decode.list Decode.string))
-          ("connections" := Decode.map Set.fromList (Decode.list Decode.string)))
+        (decode ServerModel
+          |> required "messages" (Decode.list Decode.string)
+          |> required "connections" (Decode.map Set.fromList (Decode.list Decode.string)))
     "Connection" ->
-      Decode.succeed Connection
-        |: ("id" := Decode.string)
+      decode Connection
+        |> required "id" Decode.string
     "Disconnection" ->
-      Decode.succeed Disconnection
-        |: ("id" := Decode.string)
+      decode Disconnection
+        |> required "id" Decode.string
     "Message" ->
-      Decode.succeed Message
-        |: ("message" := Decode.string)
-    _ -> Decode.succeed Error
+      decode Message
+        |> required "message" Decode.string
+    _ -> decode Error
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  WebSocket.listen server decode
+  WebSocket.listen server decodeInput
 
 
 

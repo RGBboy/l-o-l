@@ -104,16 +104,6 @@ encode = encodeMsg >> (Encode.encode 2)
 encodeMsg : Msg -> Encode.Value
 encodeMsg msg =
   case msg of
-    Connection id ->
-      Encode.object
-        [ ("type", Encode.string "Connection")
-        , ("id", Encode.string id)
-        ]
-    Disconnection id ->
-      Encode.object
-        [ ("type", Encode.string "Disconnection")
-        , ("id", Encode.string id)
-        ]
     Message message ->
       Encode.object
         [ ("type", Encode.string "Message")

@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Full stack chat with Elm and Node.js",
   "author": "RGBboy",
+  "repository" : {
+    "type" : "git",
+    "url" : "https://github.com/RGBboy/elm-chat.git"
+  },
   "private": true,
   "main": "./lib/server",
   "scripts": {

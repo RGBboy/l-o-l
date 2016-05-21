@@ -202,7 +202,7 @@ view : Model -> Html Msg
 view model =
   H.div []
     [ H.h1 []
-        [ H.text "Network Experiment"
+        [ H.text "Elm Chat"
         ]
     , connectionsView model.connections
     , messagesView model.messages

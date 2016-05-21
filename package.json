@@ -7,9 +7,8 @@
   "main": "./lib/server",
   "scripts": {
     "start": "node ./lib/server",
-    "bundle": "browserify ./lib/client.js -o ./public/client.js",
-    "build": "npm run build:client && npm run build:server && npm run bundle",
-    "build:client": "elm-make ./src/Client.elm --output ./build/client.js",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "elm-make ./src/Client.elm --output ./public/client.js",
     "build:server": "elm-make ./src/Server.elm --output ./build/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -20,7 +19,6 @@
     "ws": "^1.0.0"
   },
   "devDependencies": {
-    "browserify": "^12.0.1",
     "uglify-js": "^2.6.1"
   },
   "license": "ISC"

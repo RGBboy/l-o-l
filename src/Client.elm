@@ -103,10 +103,11 @@ encodeMsg : Msg -> Encode.Value
 encodeMsg msg =
   case msg of
     Message message ->
-      Encode.object
-        [ ("type", Encode.string "Message")
-        , ("message", Encode.string message)
-        ]
+      Encode.string message
+      -- Encode.object
+      --   [ ("type", Encode.string "Message")
+      --   , ("message", Encode.string message)
+      --   ]
     _ -> Encode.null
 
 decodeInput : String -> Msg

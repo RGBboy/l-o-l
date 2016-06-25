@@ -2,32 +2,33 @@ port module Server exposing (..)
 
 import Set exposing (Set)
 
-import Html exposing (Html)
-import Html.App as App
-
 import Json.Decode as Decode exposing (Decoder, (:=))
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
+import WebSocketServer exposing (Socket, sendToOne, sendToMany)
+
+-- Input port of messages from clients
+
+port input : (Decode.Value -> msg) -> Sub msg
+
 main : Program Never
 main =
-  App.program
+  WebSocketServer.program
+    messageDecoder
+    input
     { init = init
-    , view = view
     , update = update
+    , connection = onConnection
+    , disconnection = onDisconnection
+    , message = onMessage
     , subscriptions = subscriptions
     }
-
--- View
-
--- hack for server program to work
-view : Model -> Html Msg
-view = always (Html.text "")
 
 -- Model
 
 type alias Model =
-  { connections: Set String
+  { connections: Set Socket
   , messages: List String
   }
 
@@ -40,14 +41,56 @@ init =
 
 -- Update
 
-type Msg
-  = Error
-  | Init Model
-  | Connection String
-  | Disconnection String
+type Msg =
+  Error
+
+onConnection : Socket -> Model -> (Model, Cmd Msg)
+onConnection socket model =
+  let
+    connections = Set.insert socket model.connections
+    newModel = { model | connections = connections }
+  in
+    ( newModel
+    , Cmd.batch
+      [ sendToOne output (encodeMsg (Init newModel)) socket
+      , sendToMany output (encodeMsg (Connection socket)) (Set.toList model.connections)
+      ]
+    )
+
+onDisconnection : Socket -> Model -> (Model, Cmd Msg)
+onDisconnection socket model =
+  let
+    connections = Set.remove socket model.connections
+  in
+    ( { model | connections = connections }
+    , sendToMany output (encodeMsg (Disconnection socket)) (Set.toList model.connections)
+    )
+
+messageDecoder : Decoder String
+messageDecoder = Decode.string
+
+onMessage : Socket -> String -> Model -> (Model, Cmd Msg)
+onMessage socket message model =
+  ( { model | messages = message :: model.messages }
+  , sendToMany output (encodeMsg (Message message)) (Set.toList model.connections)
+  )
+
+update : Msg -> Model -> (Model, Cmd Msg)
+update msg model = (model, Cmd.none)
+
+subscriptions : Model -> Sub Msg
+subscriptions model = Sub.none
+
+-- Output
+
+type Output
+  = Init Model
+  | Connection Socket
+  | Disconnection Socket
   | Message String
 
-encodeMsg : Msg -> Encode.Value
+
+encodeMsg : Output -> Encode.Value
 encodeMsg msg =
   case msg of
     Init model ->
@@ -71,80 +114,5 @@ encodeMsg msg =
         [ ("type", Encode.string "Message")
         , ("message", Encode.string message)
         ]
-    _ -> Encode.null
-
-encodeAddressedMsg : String -> Msg -> Encode.Value
-encodeAddressedMsg id msg =
-  Encode.object
-    [ ("to", Encode.string id)
-    , ("data", encodeMsg msg)
-    ]
 
 port output : Encode.Value -> Cmd msg
-
--- Tag a command with who it is for?
-sendToOne : Msg -> String -> Cmd msg
-sendToOne msg id =
-  output (encodeAddressedMsg id msg)
-
-sendToMany : Msg -> List String -> Cmd msg
-sendToMany msg ids =
-  Cmd.batch (List.map (sendToOne msg) ids)
-
-update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
-  case msg of
-    Connection id ->
-      let
-        newModel = { model | connections = Set.insert id model.connections }
-      in
-        ( newModel
-        , Cmd.batch
-          [ sendToOne (Init newModel) id
-          , sendToMany msg (Set.toList model.connections)
-          ]
-        )
-    Disconnection id ->
-      let
-        connections = Set.remove id model.connections
-      in
-        ( { model | connections = connections }
-        , sendToMany msg (Set.toList connections)
-        )
-    Message message ->
-      ( { model | messages = message :: model.messages }
-      , sendToMany msg (Set.toList model.connections)
-      )
-    _ -> (model, Cmd.none)
-
-decodeInput : Decode.Value -> Msg
-decodeInput value =
-  Result.withDefault Error (Decode.decodeValue msgDecoder value)
-
-msgDecoder : Decoder Msg
-msgDecoder =
-  ("type" := Decode.string) `Decode.andThen` msgTypeDecoder
-
-msgTypeDecoder : String -> Decoder Msg
-msgTypeDecoder kind =
-  case kind of
-    "Connection" ->
-      decode Connection
-        |> required "id" Decode.string
-    "Disconnection" ->
-      decode Disconnection
-        |> required "id" Decode.string
-    "Message" ->
-      decode Message
-        |> required "message" Decode.string
-    _ -> decode Error
-
--- Input port of messages from clients
-port input : (Decode.Value -> msg) -> Sub msg
-
-subscriptions : Model -> Sub Msg
-subscriptions model =
-  let
-    model = Debug.log "Model" model
-  in
-    input decodeInput

@@ -9,6 +9,11 @@ import Json.Decode as Decode exposing (Decoder, (:=))
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
+-- Ports
+
+port inputWSS : (Decode.Value -> msg) -> Sub msg
+
+port outputWSS : Encode.Value -> Cmd msg
 
 -- Programs
 
@@ -21,9 +26,10 @@ type Msg a msg
   | Error
   | UserMsg msg
 
+
+
 programWithFlags
   : Decoder a
-  -> ((Decode.Value -> Msg a msg) -> Sub (Msg a msg))
   ->
     { init : flags -> (model, Cmd msg)
     , update : msg -> model -> (model, Cmd msg)
@@ -33,7 +39,7 @@ programWithFlags
     , subscriptions : model -> Sub msg
     }
   -> Program flags
-programWithFlags decoder input app =
+programWithFlags decoder app =
   let
     update msg model =
       updateHelp UserMsg <|
@@ -50,7 +56,7 @@ programWithFlags decoder input app =
 
     subs model =
       Sub.batch
-        [ input (decodeInput decoder)
+        [ inputWSS (decodeInput decoder)
         , Sub.map UserMsg (app.subscriptions model)
         ]
 
@@ -71,7 +77,6 @@ updateHelp func (model, cmds) =
 
 program
   : Decoder a
-  -> ((Decode.Value -> Msg a msg) -> Sub (Msg a msg))
   ->
     { init : (model, Cmd msg)
     , update : msg -> model -> (model, Cmd msg)
@@ -81,20 +86,18 @@ program
     , subscriptions : model -> Sub msg
     }
   -> Program Never
-program decoder input app =
-  programWithFlags decoder input { app | init = \_ -> app.init }
-
-
+program decoder app =
+  programWithFlags decoder { app | init = \_ -> app.init }
 
 -- Commands
 
-sendToOne : (Encode.Value -> Cmd msg) -> Encode.Value -> Socket -> Cmd msg
-sendToOne output message socket =
-  output (encodeAddressedMsg socket message)
+sendToOne : Encode.Value -> Socket -> Cmd msg
+sendToOne message socket =
+  outputWSS (encodeAddressedMsg socket message)
 
-sendToMany : (Encode.Value -> Cmd msg) -> Encode.Value -> List Socket -> Cmd msg
-sendToMany output message sockets =
-  Cmd.batch (List.map (sendToOne output message) sockets)
+sendToMany : Encode.Value -> List Socket -> Cmd msg
+sendToMany message sockets =
+  Cmd.batch (List.map (sendToOne message) sockets)
 
 encodeAddressedMsg : Socket -> Encode.Value -> Encode.Value
 encodeAddressedMsg id message =

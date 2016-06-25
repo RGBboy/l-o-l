@@ -31,12 +31,12 @@ type alias User = String
 
 type alias Model =
   { input: String
-  , messages: List String
+  , messages: List (String, String)
   , connections: Set String
   }
 
 type alias ServerModel =
-  { messages: List String
+  { messages: List (String, String)
   , connections: Set String
   }
 
@@ -58,7 +58,8 @@ type Msg
   | Init ServerModel
   | Connection String
   | Disconnection String
-  | Message String
+  | MessageIn String String
+  | MessageOut String
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -70,7 +71,7 @@ update message model =
       )
     Send ->
       ( { model | input = "" }
-      ,  WebSocket.send server (encode (Message model.input))
+      ,  WebSocket.send server (encode (MessageOut model.input))
       )
     Init init ->
       ( { model
@@ -87,8 +88,8 @@ update message model =
       ( { model | connections = Set.remove id model.connections }
       , Cmd.none
       )
-    Message message ->
-      ( { model | messages = message :: model.messages }
+    MessageIn id message ->
+      ( { model | messages = (id, message) :: model.messages }
       , Cmd.none
       )
     _ -> (model, Cmd.none)
@@ -102,7 +103,7 @@ encode = encodeMsg >> (Encode.encode 2)
 encodeMsg : Msg -> Encode.Value
 encodeMsg msg =
   case msg of
-    Message message ->
+    MessageOut message ->
       Encode.string message
       -- Encode.object
       --   [ ("type", Encode.string "Message")
@@ -124,7 +125,7 @@ msgTypeDecoder kind =
     "Init" ->
       Decode.map Init
         (decode ServerModel
-          |> required "messages" (Decode.list Decode.string)
+          |> required "messages" (Decode.list messageDecoder)
           |> required "connections" (Decode.map Set.fromList (Decode.list Decode.string)))
     "Connection" ->
       decode Connection
@@ -133,9 +134,16 @@ msgTypeDecoder kind =
       decode Disconnection
         |> required "id" Decode.string
     "Message" ->
-      decode Message
+      decode MessageIn
+        |> required "id" Decode.string
         |> required "message" Decode.string
     _ -> decode Error
+
+messageDecoder : Decoder (String, String)
+messageDecoder =
+  decode (,)
+    |> required "id" Decode.string
+    |> required "messages" Decode.string
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
@@ -165,15 +173,17 @@ connectionsView connections =
         (List.map connectionView (Set.toList connections))
     ]
 
-messageView : String -> Html Msg
-messageView message =
+messageView : (String, String) -> Html Msg
+messageView (id, message) =
   H.div []
     [ H.span []
-        [ H.text message
+        [ H.text id
+        , H.text ": "
+        , H.text message
         ]
     ]
 
-messagesView : List String -> Html Msg
+messagesView : List (String, String)-> Html Msg
 messagesView messages =
   H.div []
     [ H.div []

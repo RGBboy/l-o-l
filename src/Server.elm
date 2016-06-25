@@ -1,22 +1,16 @@
-port module Server exposing (..)
+module Server exposing (..)
 
 import Set exposing (Set)
 
-import Json.Decode as Decode exposing (Decoder, (:=))
-import Json.Decode.Pipeline exposing (decode, required)
+import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 
 import WebSocketServer exposing (Socket, sendToOne, sendToMany)
-
--- Input port of messages from clients
-
-port input : (Decode.Value -> msg) -> Sub msg
 
 main : Program Never
 main =
   WebSocketServer.program
     messageDecoder
-    input
     { init = init
     , update = update
     , connection = onConnection
@@ -29,7 +23,7 @@ main =
 
 type alias Model =
   { connections: Set Socket
-  , messages: List String
+  , messages: List (Socket, String)
   }
 
 init : (Model, Cmd Msg)
@@ -42,7 +36,7 @@ init =
 -- Update
 
 type Msg =
-  Error
+  Noop
 
 onConnection : Socket -> Model -> (Model, Cmd Msg)
 onConnection socket model =
@@ -52,8 +46,8 @@ onConnection socket model =
   in
     ( newModel
     , Cmd.batch
-      [ sendToOne output (encodeMsg (Init newModel)) socket
-      , sendToMany output (encodeMsg (Connection socket)) (Set.toList model.connections)
+      [ sendToOne (encodeMsg (Init newModel)) socket
+      , sendToMany (encodeMsg (Connection socket)) (Set.toList model.connections)
       ]
     )
 
@@ -63,7 +57,7 @@ onDisconnection socket model =
     connections = Set.remove socket model.connections
   in
     ( { model | connections = connections }
-    , sendToMany output (encodeMsg (Disconnection socket)) (Set.toList model.connections)
+    , sendToMany (encodeMsg (Disconnection socket)) (Set.toList model.connections)
     )
 
 messageDecoder : Decoder String
@@ -71,8 +65,8 @@ messageDecoder = Decode.string
 
 onMessage : Socket -> String -> Model -> (Model, Cmd Msg)
 onMessage socket message model =
-  ( { model | messages = message :: model.messages }
-  , sendToMany output (encodeMsg (Message message)) (Set.toList model.connections)
+  ( { model | messages = (socket, message) :: model.messages }
+  , sendToMany (encodeMsg (Message socket message)) (Set.toList model.connections)
   )
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -87,8 +81,14 @@ type Output
   = Init Model
   | Connection Socket
   | Disconnection Socket
-  | Message String
+  | Message Socket String
 
+encodeMessage : (Socket, String) -> Encode.Value
+encodeMessage (socket, message) =
+  Encode.object
+    [ ("id", Encode.string socket)
+    , ("message", Encode.string message)
+    ]
 
 encodeMsg : Output -> Encode.Value
 encodeMsg msg =
@@ -97,7 +97,7 @@ encodeMsg msg =
       Encode.object
         [ ("type", Encode.string "Init")
         , ("connections", Encode.list (List.map Encode.string (Set.toList model.connections)) )
-        , ("messages", Encode.list (List.map Encode.string model.messages) )
+        , ("messages", Encode.list (List.map encodeMessage model.messages) )
         ]
     Connection id ->
       Encode.object
@@ -109,10 +109,9 @@ encodeMsg msg =
         [ ("type", Encode.string "Disconnection")
         , ("id", Encode.string id)
         ]
-    Message message ->
+    Message id message ->
       Encode.object
         [ ("type", Encode.string "Message")
+        , ("id", Encode.string id)
         , ("message", Encode.string message)
         ]
-
-port output : Encode.Value -> Cmd msg

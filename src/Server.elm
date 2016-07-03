@@ -26,7 +26,7 @@ type alias Model =
   , messages: List (Socket, String)
   }
 
-init : (Model, Cmd Msg)
+init : (Model, Cmd msg)
 init =
   ( { connections = Set.empty
     , messages = []
@@ -35,10 +35,7 @@ init =
 
 -- Update
 
-type Msg =
-  Noop
-
-onConnection : Socket -> Model -> (Model, Cmd Msg)
+onConnection : Socket -> Model -> (Model, Cmd msg)
 onConnection socket model =
   let
     connections = Set.insert socket model.connections
@@ -51,7 +48,7 @@ onConnection socket model =
       ]
     )
 
-onDisconnection : Socket -> Model -> (Model, Cmd Msg)
+onDisconnection : Socket -> Model -> (Model, Cmd msg)
 onDisconnection socket model =
   let
     connections = Set.remove socket model.connections
@@ -63,21 +60,21 @@ onDisconnection socket model =
 messageDecoder : Decoder String
 messageDecoder = Decode.string
 
-onMessage : Socket -> String -> Model -> (Model, Cmd Msg)
+onMessage : Socket -> String -> Model -> (Model, Cmd msg)
 onMessage socket message model =
   ( { model | messages = (socket, message) :: model.messages }
   , sendToMany (encodeMsg (Message socket message)) (Set.toList model.connections)
   )
 
-update : Msg -> Model -> (Model, Cmd Msg)
+update : a -> Model -> (Model, Cmd msg)
 update msg model = (model, Cmd.none)
 
-subscriptions : Model -> Sub Msg
+subscriptions : Model -> Sub msg
 subscriptions model = Sub.none
 
 -- Output
 
-type Output
+type OutputMsg
   = Init Model
   | Connection Socket
   | Disconnection Socket
@@ -90,7 +87,7 @@ encodeMessage (socket, message) =
     , ("message", Encode.string message)
     ]
 
-encodeMsg : Output -> Encode.Value
+encodeMsg : OutputMsg -> Encode.Value
 encodeMsg msg =
   case msg of
     Init model ->

@@ -5,7 +5,7 @@ import Set exposing (Set)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 
-import WebSocketServer exposing (Socket, sendToOne, sendToMany)
+import WebSocketServer exposing (Socket, Event, sendToOne, sendToMany)
 
 main : Program Never
 main =
@@ -13,9 +13,7 @@ main =
     messageDecoder
     { init = init
     , update = update
-    , connection = onConnection
-    , disconnection = onDisconnection
-    , message = onMessage
+    , onEvent = onEvent
     , subscriptions = subscriptions
     }
 
@@ -65,6 +63,14 @@ onMessage socket message model =
   ( { model | messages = (socket, message) :: model.messages }
   , sendToMany (encodeMsg (Message socket message)) (Set.toList model.connections)
   )
+
+onEvent : Event String -> Model -> (Model, Cmd msg)
+onEvent event model =
+  case event of
+    WebSocketServer.Connection socket -> onConnection socket model
+    WebSocketServer.Disconnection socket -> onDisconnection socket model
+    WebSocketServer.Message socket a -> onMessage socket a model
+    _ -> (model, Cmd.none)
 
 update : a -> Model -> (Model, Cmd msg)
 update msg model = (model, Cmd.none)

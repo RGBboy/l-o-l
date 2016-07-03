@@ -1,4 +1,11 @@
-port module WebSocketServer exposing (..)
+port module WebSocketServer exposing
+  ( Socket
+  , Event(Connection, Disconnection, Message, Error)
+  , programWithFlags
+  , program
+  , sendToOne
+  , sendToMany
+  )
 
 import Set exposing (Set)
 
@@ -19,23 +26,22 @@ port outputWSS : Encode.Value -> Cmd msg
 
 type alias Socket = String
 
-type Msg a msg
+type Msg a b
+  = WSSEvent (Event a)
+  | UserMsg b
+
+type Event a
   = Connection Socket
   | Disconnection Socket
   | Message Socket a
   | Error
-  | UserMsg msg
-
-
 
 programWithFlags
   : Decoder a
   ->
     { init : flags -> (model, Cmd msg)
     , update : msg -> model -> (model, Cmd msg)
-    , connection : Socket -> model -> (model, Cmd msg)
-    , disconnection : Socket -> model -> (model, Cmd msg)
-    , message : Socket -> a -> model -> (model, Cmd msg)
+    , onEvent : Event a -> model -> (model, Cmd msg)
     , subscriptions : model -> Sub msg
     }
   -> Program flags
@@ -44,19 +50,13 @@ programWithFlags decoder app =
     update msg model =
       updateHelp UserMsg <|
         case msg of
-          Connection socket ->
-            app.connection socket model
-          Disconnection socket ->
-            app.disconnection socket model
-          Message socket value ->
-            app.message socket value model
-          Error -> (model, Cmd.none)
+          WSSEvent event -> app.onEvent event model
           UserMsg userMsg ->
             app.update userMsg model
 
     subs model =
       Sub.batch
-        [ inputWSS (decodeInput decoder)
+        [ inputWSS ((decodeInput decoder) >> WSSEvent)
         , Sub.map UserMsg (app.subscriptions model)
         ]
 
@@ -80,9 +80,7 @@ program
   ->
     { init : (model, Cmd msg)
     , update : msg -> model -> (model, Cmd msg)
-    , connection : Socket -> model -> (model, Cmd msg)
-    , disconnection : Socket -> model -> (model, Cmd msg)
-    , message : Socket -> a -> model -> (model, Cmd msg)
+    , onEvent : Event a -> model -> (model, Cmd msg)
     , subscriptions : model -> Sub msg
     }
   -> Program Never
@@ -108,15 +106,15 @@ encodeAddressedMsg id message =
 
 -- Subscriptions
 
-decodeInput : Decoder a -> Decode.Value -> Msg a b
+decodeInput : Decoder a -> Decode.Value -> Event a
 decodeInput decodeMessage value =
   Result.withDefault Error (Decode.decodeValue (msgDecoder decodeMessage) value)
 
-msgDecoder : Decoder a -> Decoder (Msg a b)
+msgDecoder : Decoder a -> Decoder (Event a)
 msgDecoder decodeMessage =
   ("type" := Decode.string) `Decode.andThen` (msgTypeDecoder decodeMessage)
 
-msgTypeDecoder : Decoder a -> String -> Decoder (Msg a b)
+msgTypeDecoder : Decoder a -> String -> Decoder (Event a)
 msgTypeDecoder decodeMessage kind =
   case kind of
     "Connection" ->

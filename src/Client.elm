@@ -3,6 +3,7 @@ import Html.App as Html
 import Html.Attributes as A
 import Html.Events as E
 import WebSocket
+import WebSocketServer exposing (Socket)
 
 import Set exposing (Set)
 
@@ -18,7 +19,6 @@ main =
     , subscriptions = subscriptions
     }
 
-
 server : String
 server =
   "ws://localhost:8080"
@@ -31,13 +31,13 @@ type alias User = String
 
 type alias Model =
   { input: String
-  , messages: List (String, String)
-  , connections: Set String
+  , messages: List (Socket, String)
+  , connections: Set Socket
   }
 
 type alias ServerModel =
-  { messages: List (String, String)
-  , connections: Set String
+  { messages: List (Socket, String)
+  , connections: Set Socket
   }
 
 init : (Model, Cmd Msg)
@@ -49,6 +49,8 @@ init =
   , Cmd.none
   )
 
+
+
 -- UPDATE
 
 type Msg
@@ -56,9 +58,9 @@ type Msg
   | Send
   | Error
   | Init ServerModel
-  | Connection String
-  | Disconnection String
-  | MessageIn String String
+  | Connection Socket
+  | Disconnection Socket
+  | MessageIn Socket String
   | MessageOut String
 
 
@@ -80,19 +82,20 @@ update message model =
         }
       , Cmd.none
       )
-    Connection id ->
-      ( { model | connections = Set.insert id model.connections }
+    Connection socket ->
+      ( { model | connections = Set.insert socket model.connections }
       , Cmd.none
       )
-    Disconnection id ->
-      ( { model | connections = Set.remove id model.connections }
+    Disconnection socket ->
+      ( { model | connections = Set.remove socket model.connections }
       , Cmd.none
       )
-    MessageIn id message ->
-      ( { model | messages = (id, message) :: model.messages }
+    MessageIn socket message ->
+      ( { model | messages = (socket, message) :: model.messages }
       , Cmd.none
       )
     _ -> (model, Cmd.none)
+
 
 
 -- SUBSCRIPTIONS
@@ -105,10 +108,6 @@ encodeMsg msg =
   case msg of
     MessageOut message ->
       Encode.string message
-      -- Encode.object
-      --   [ ("type", Encode.string "Message")
-      --   , ("message", Encode.string message)
-      --   ]
     _ -> Encode.null
 
 decodeInput : String -> Msg
@@ -143,7 +142,7 @@ messageDecoder : Decoder (String, String)
 messageDecoder =
   decode (,)
     |> required "id" Decode.string
-    |> required "messages" Decode.string
+    |> required "message" Decode.string
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
@@ -153,15 +152,15 @@ subscriptions model =
 
 -- VIEW
 
-connectionView : String -> Html Msg
-connectionView id =
+connectionView : Socket -> Html Msg
+connectionView socket =
   H.div []
     [ H.span []
-        [ H.text ("Connection " ++ id)
+        [ H.text ("Connection " ++ socket)
         ]
     ]
 
-connectionsView : Set String -> Html Msg
+connectionsView : Set Socket -> Html Msg
 connectionsView connections =
   H.div []
     [ H.div []
@@ -173,17 +172,17 @@ connectionsView connections =
         (List.map connectionView (Set.toList connections))
     ]
 
-messageView : (String, String) -> Html Msg
-messageView (id, message) =
+messageView : (Socket, String) -> Html Msg
+messageView (socket, message) =
   H.div []
     [ H.span []
-        [ H.text id
+        [ H.text socket
         , H.text ": "
         , H.text message
         ]
     ]
 
-messagesView : List (String, String)-> Html Msg
+messagesView : List (Socket, String)-> Html Msg
 messagesView messages =
   H.div []
     [ H.div []

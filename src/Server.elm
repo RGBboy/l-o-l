@@ -1,23 +1,35 @@
-module Server exposing (..)
+port module Server exposing (..)
 
 import Set exposing (Set)
 
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 
-import WebSocketServer exposing (Socket, Event, sendToOne, sendToMany)
+import Html exposing (..)
+import Html.App as App
+
+import WebSocketServer as WSS exposing (Socket, sendToOne, sendToMany)
 
 main : Program Never
 main =
-  WebSocketServer.program
-    messageDecoder
+  App.program
     { init = init
     , update = update
-    , onEvent = onEvent
+    , view = always (Html.text "") -- hack for server program to work
     , subscriptions = subscriptions
     }
 
--- Model
+
+
+-- PORTS
+
+port inputWSS : (Decode.Value -> msg) -> Sub msg
+
+port outputWSS : Encode.Value -> Cmd msg
+
+
+
+-- MODEL
 
 type alias Model =
   { connections: Set Socket
@@ -31,7 +43,17 @@ init =
     }
   , Cmd.none)
 
--- Update
+
+
+-- UPDATE
+
+update : WSS.Event String -> Model -> (Model, Cmd msg)
+update message model =
+  case message of
+    WSS.Connection socket -> onConnection socket model
+    WSS.Disconnection socket -> onDisconnection socket model
+    WSS.Message socket message -> onMessage socket message model
+    WSS.Error -> (model, Cmd.none)
 
 onConnection : Socket -> Model -> (Model, Cmd msg)
 onConnection socket model =
@@ -41,8 +63,8 @@ onConnection socket model =
   in
     ( newModel
     , Cmd.batch
-      [ sendToOne (encodeMsg (Init newModel)) socket
-      , sendToMany (encodeMsg (Connection socket)) (Set.toList model.connections)
+      [ sendToOne outputWSS (encodeMsg (Init newModel)) socket
+      , sendToMany outputWSS (encodeMsg (Connection socket)) (Set.toList model.connections)
       ]
     )
 
@@ -52,33 +74,24 @@ onDisconnection socket model =
     connections = Set.remove socket model.connections
   in
     ( { model | connections = connections }
-    , sendToMany (encodeMsg (Disconnection socket)) (Set.toList model.connections)
+    , sendToMany outputWSS (encodeMsg (Disconnection socket)) (Set.toList model.connections)
     )
-
-messageDecoder : Decoder String
-messageDecoder = Decode.string
 
 onMessage : Socket -> String -> Model -> (Model, Cmd msg)
 onMessage socket message model =
   ( { model | messages = (socket, message) :: model.messages }
-  , sendToMany (encodeMsg (Message socket message)) (Set.toList model.connections)
+  , sendToMany outputWSS (encodeMsg (Message socket message)) (Set.toList model.connections)
   )
 
-onEvent : Event String -> Model -> (Model, Cmd msg)
-onEvent event model =
-  case event of
-    WebSocketServer.Connection socket -> onConnection socket model
-    WebSocketServer.Disconnection socket -> onDisconnection socket model
-    WebSocketServer.Message socket a -> onMessage socket a model
-    _ -> (model, Cmd.none)
+messageDecoder : Decoder String
+messageDecoder = Decode.string
 
-update : a -> Model -> (Model, Cmd msg)
-update msg model = (model, Cmd.none)
+subscriptions : Model -> Sub (WSS.Event String)
+subscriptions model = inputWSS (WSS.decodeEvent messageDecoder)
 
-subscriptions : Model -> Sub msg
-subscriptions model = Sub.none
 
--- Output
+
+-- OUTPUT
 
 type OutputMsg
   = Init Model
@@ -99,8 +112,8 @@ encodeMsg msg =
     Init model ->
       Encode.object
         [ ("type", Encode.string "Init")
-        , ("connections", Encode.list (List.map Encode.string (Set.toList model.connections)) )
         , ("messages", Encode.list (List.map encodeMessage model.messages) )
+        , ("connections", Encode.list (List.map Encode.string (Set.toList model.connections)) )
         ]
     Connection id ->
       Encode.object

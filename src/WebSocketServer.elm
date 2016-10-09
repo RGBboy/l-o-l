@@ -1,34 +1,18 @@
-port module WebSocketServer exposing
+module WebSocketServer exposing
   ( Socket
   , Event(Connection, Disconnection, Message, Error)
-  , programWithFlags
-  , program
   , sendToOne
   , sendToMany
+  , decodeEvent
   )
 
 import Set exposing (Set)
-
-import Html exposing (Html)
-import Html.App as App
 
 import Json.Decode as Decode exposing (Decoder, (:=))
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
--- Ports
-
-port inputWSS : (Decode.Value -> msg) -> Sub msg
-
-port outputWSS : Encode.Value -> Cmd msg
-
--- Programs
-
 type alias Socket = String
-
-type Msg a b
-  = WSSEvent (Event a)
-  | UserMsg b
 
 type Event a
   = Connection Socket
@@ -36,78 +20,28 @@ type Event a
   | Message Socket a
   | Error
 
-programWithFlags
-  : Decoder a
-  ->
-    { init : flags -> (model, Cmd msg)
-    , update : msg -> model -> (model, Cmd msg)
-    , onEvent : Event a -> model -> (model, Cmd msg)
-    , subscriptions : model -> Sub msg
-    }
-  -> Program flags
-programWithFlags decoder app =
-  let
-    update msg model =
-      updateHelp UserMsg <|
-        case msg of
-          WSSEvent event -> app.onEvent event model
-          UserMsg userMsg ->
-            app.update userMsg model
 
-    subs model =
-      Sub.batch
-        [ inputWSS ((decodeInput decoder) >> WSSEvent)
-        , Sub.map UserMsg (app.subscriptions model)
-        ]
+-- COMMANDS
 
-    init flags =
-      updateHelp UserMsg (app.init flags)
-  in
-    App.programWithFlags
-      { init = init
-      , view = always (Html.text "") -- hack for server program to work
-      , update = update
-      , subscriptions = subs
-      }
+sendToOne : (Encode.Value -> Cmd msg) -> Encode.Value -> Socket -> Cmd msg
+sendToOne outputPort message socket =
+  outputPort (encodeAddressedMsg socket message)
 
-
-updateHelp : (a -> b) -> (model, Cmd a) -> (model, Cmd b)
-updateHelp func (model, cmds) =
-  (model, Cmd.map func cmds)
-
-program
-  : Decoder a
-  ->
-    { init : (model, Cmd msg)
-    , update : msg -> model -> (model, Cmd msg)
-    , onEvent : Event a -> model -> (model, Cmd msg)
-    , subscriptions : model -> Sub msg
-    }
-  -> Program Never
-program decoder app =
-  programWithFlags decoder { app | init = \_ -> app.init }
-
--- Commands
-
-sendToOne : Encode.Value -> Socket -> Cmd msg
-sendToOne message socket =
-  outputWSS (encodeAddressedMsg socket message)
-
-sendToMany : Encode.Value -> List Socket -> Cmd msg
-sendToMany message sockets =
-  Cmd.batch (List.map (sendToOne message) sockets)
+sendToMany : (Encode.Value -> Cmd msg) -> Encode.Value -> List Socket -> Cmd msg
+sendToMany outputPort message sockets =
+  Cmd.batch (List.map (sendToOne outputPort message) sockets)
 
 encodeAddressedMsg : Socket -> Encode.Value -> Encode.Value
-encodeAddressedMsg id message =
+encodeAddressedMsg socket message =
   Encode.object
-    [ ("to", Encode.string id)
+    [ ("to", Encode.string socket)
     , ("data", message)
     ]
 
--- Subscriptions
+-- DECODER
 
-decodeInput : Decoder a -> Decode.Value -> Event a
-decodeInput decodeMessage value =
+decodeEvent : Decoder a -> Decode.Value -> Event a
+decodeEvent decodeMessage value =
   Result.withDefault Error (Decode.decodeValue (msgDecoder decodeMessage) value)
 
 msgDecoder : Decoder a -> Decoder (Event a)

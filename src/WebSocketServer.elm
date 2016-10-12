@@ -1,6 +1,7 @@
 module WebSocketServer exposing
   ( Socket
   , Event(Connection, Disconnection, Message, Error)
+  , close
   , sendToOne
   , sendToMany
   , decodeEvent
@@ -23,18 +24,30 @@ type Event a
 
 -- COMMANDS
 
+close : (Encode.Value -> Cmd msg) -> Socket -> Cmd msg
+close outputPort socket =
+  outputPort (encodeClose socket)
+
 sendToOne : (Encode.Value -> Cmd msg) -> Encode.Value -> Socket -> Cmd msg
 sendToOne outputPort message socket =
-  outputPort (encodeAddressedMsg socket message)
+  outputPort (encodeMessage socket message)
 
 sendToMany : (Encode.Value -> Cmd msg) -> Encode.Value -> List Socket -> Cmd msg
 sendToMany outputPort message sockets =
   Cmd.batch (List.map (sendToOne outputPort message) sockets)
 
-encodeAddressedMsg : Socket -> Encode.Value -> Encode.Value
-encodeAddressedMsg socket message =
+encodeClose : Socket -> Encode.Value
+encodeClose socket =
   Encode.object
-    [ ("to", Encode.string socket)
+    [ ("type", Encode.string "Close")
+    , ("id", Encode.string socket)
+    ]
+
+encodeMessage : Socket -> Encode.Value -> Encode.Value
+encodeMessage socket message =
+  Encode.object
+    [ ("type", Encode.string "Message")
+    , ("id", Encode.string socket)
     , ("data", message)
     ]
 

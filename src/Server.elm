@@ -19,7 +19,8 @@ main =
     , subscriptions = subscriptions
     }
 
-
+maxConnections : Int
+maxConnections = 8
 
 -- PORTS
 
@@ -57,25 +58,32 @@ update message model =
 
 onConnection : Socket -> Model -> (Model, Cmd msg)
 onConnection socket model =
-  let
-    connections = Set.insert socket model.connections
-    newModel = { model | connections = connections }
-  in
-    ( newModel
-    , Cmd.batch
-      [ sendToOne outputWSS (encodeMsg (Init newModel)) socket
-      , sendToMany outputWSS (encodeMsg (Connection socket)) (Set.toList model.connections)
-      ]
-    )
+  if (Set.size model.connections) <= maxConnections then
+    let
+      connections = Set.insert socket model.connections
+      newModel = { model | connections = connections }
+    in
+      ( newModel
+      , Cmd.batch
+        [ sendToOne outputWSS (encodeMsg (Init newModel)) socket
+        , sendToMany outputWSS (encodeMsg (Connection socket)) (Set.toList model.connections)
+        ]
+      )
+  else
+    (model, WSS.close outputWSS socket)
 
 onDisconnection : Socket -> Model -> (Model, Cmd msg)
 onDisconnection socket model =
-  let
-    connections = Set.remove socket model.connections
-  in
-    ( { model | connections = connections }
-    , sendToMany outputWSS (encodeMsg (Disconnection socket)) (Set.toList model.connections)
-    )
+  if (Set.member socket model.connections) then
+    let
+      exists = Set.member socket model.connections
+      connections = Set.remove socket model.connections
+    in
+      ( { model | connections = connections }
+      , sendToMany outputWSS (encodeMsg (Disconnection socket)) (Set.toList model.connections)
+      )
+  else
+    (model, Cmd.none)
 
 onMessage : Socket -> String -> Model -> (Model, Cmd msg)
 onMessage socket message model =

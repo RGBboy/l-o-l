@@ -34,7 +34,7 @@ port outputWSS : Encode.Value -> Cmd msg
 
 type alias Model =
   { connections: Set Socket
-  , messages: List (Socket, String)
+  , messages: List (Socket, Encode.Value)
   }
 
 init : (Model, Cmd msg)
@@ -48,7 +48,7 @@ init =
 
 -- UPDATE
 
-update : WSS.Event String -> Model -> (Model, Cmd msg)
+update : WSS.Event Encode.Value -> Model -> (Model, Cmd msg)
 update message model =
   case message of
     WSS.Connection socket -> onConnection socket model
@@ -85,17 +85,14 @@ onDisconnection socket model =
   else
     (model, Cmd.none)
 
-onMessage : Socket -> String -> Model -> (Model, Cmd msg)
+onMessage : Socket -> Encode.Value -> Model -> (Model, Cmd msg)
 onMessage socket message model =
   ( { model | messages = (socket, message) :: model.messages }
-  , sendToMany outputWSS (encodeMsg (Message socket message)) (Set.toList model.connections)
+  , sendToMany outputWSS (encodeMsg (Message (socket, message))) (Set.toList model.connections)
   )
 
-messageDecoder : Decoder String
-messageDecoder = Decode.string
-
-subscriptions : Model -> Sub (WSS.Event String)
-subscriptions model = inputWSS (WSS.decodeEvent messageDecoder)
+subscriptions : Model -> Sub (WSS.Event Encode.Value)
+subscriptions model = inputWSS (WSS.decodeEvent Decode.value)
 
 
 
@@ -105,13 +102,13 @@ type OutputMsg
   = Init Model
   | Connection Socket
   | Disconnection Socket
-  | Message Socket String
+  | Message (Socket, Encode.Value)
 
-encodeMessage : (Socket, String) -> Encode.Value
+encodeMessage : (Socket, Encode.Value) -> Encode.Value
 encodeMessage (socket, message) =
   Encode.object
     [ ("id", Encode.string socket)
-    , ("message", Encode.string message)
+    , ("message", message)
     ]
 
 encodeMsg : OutputMsg -> Encode.Value
@@ -123,19 +120,19 @@ encodeMsg msg =
         , ("messages", Encode.list (List.map encodeMessage model.messages) )
         , ("connections", Encode.list (List.map Encode.string (Set.toList model.connections)) )
         ]
-    Connection id ->
+    Connection socket ->
       Encode.object
         [ ("type", Encode.string "Connection")
-        , ("id", Encode.string id)
+        , ("id", Encode.string socket)
         ]
-    Disconnection id ->
+    Disconnection socket ->
       Encode.object
         [ ("type", Encode.string "Disconnection")
-        , ("id", Encode.string id)
+        , ("id", Encode.string socket)
         ]
-    Message id message ->
+    Message (socket, message) ->
       Encode.object
         [ ("type", Encode.string "Message")
-        , ("id", Encode.string id)
-        , ("message", Encode.string message)
+        , ("id", Encode.string socket)
+        , ("message", message)
         ]

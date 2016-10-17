@@ -1,14 +1,18 @@
 port module Server exposing (..)
 
-import Set exposing (Set)
-
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode
-
 import Html exposing (..)
 import Html.App as App
 
 import WebSocketServer as WSS exposing (Socket, sendToOne, sendToMany)
+
+import Set exposing (Set)
+import Dict exposing (Dict)
+
+import Json.Decode as Decode exposing (Decoder, (:=))
+import Json.Decode.Pipeline exposing (decode, required)
+import Json.Encode as Encode
+
+
 
 main : Program Never
 main =
@@ -22,6 +26,8 @@ main =
 maxConnections : Int
 maxConnections = 8
 
+
+
 -- PORTS
 
 port inputWSS : (Decode.Value -> msg) -> Sub msg
@@ -34,13 +40,19 @@ port outputWSS : Encode.Value -> Cmd msg
 
 type alias Model =
   { connections: Set Socket
-  , messages: List (Socket, Encode.Value)
+  , posts: List (Socket, String)
+  , users: Dict Socket String
   }
+
+type MessageBody
+  = Post String
+  | Join String
 
 init : (Model, Cmd msg)
 init =
   ( { connections = Set.empty
-    , messages = []
+    , posts = []
+    , users = Dict.empty
     }
   , Cmd.none)
 
@@ -48,7 +60,7 @@ init =
 
 -- UPDATE
 
-update : WSS.Event Encode.Value -> Model -> (Model, Cmd msg)
+update : WSS.Event MessageBody -> Model -> (Model, Cmd msg)
 update message model =
   case message of
     WSS.Connection socket -> onConnection socket model
@@ -85,14 +97,42 @@ onDisconnection socket model =
   else
     (model, Cmd.none)
 
-onMessage : Socket -> Encode.Value -> Model -> (Model, Cmd msg)
+onMessage : Socket -> MessageBody -> Model -> (Model, Cmd msg)
 onMessage socket message model =
-  ( { model | messages = (socket, message) :: model.messages }
-  , sendToMany outputWSS (encodeMsg (Message (socket, message))) (Set.toList model.connections)
-  )
+  case message of
+    Post post ->
+      ( { model | posts = (socket, post) :: model.posts }
+      , sendToMany outputWSS (encodeMsg (Message (socket, message))) (Set.toList model.connections)
+      )
+    Join name ->
+      ( { model | users = Dict.insert socket name model.users }
+      , sendToMany outputWSS (encodeMsg (Message (socket, message))) (Set.toList model.connections)
+      )
 
-subscriptions : Model -> Sub (WSS.Event Encode.Value)
-subscriptions model = inputWSS (WSS.decodeEvent Decode.value)
+
+
+-- SUBSCRIPTIONS
+
+subscriptions : Model -> Sub (WSS.Event MessageBody)
+subscriptions model = inputWSS (WSS.decodeEvent decodeMessageBody)
+
+decodeMessageBody : Decoder MessageBody
+decodeMessageBody =
+  Decode.customDecoder
+    (("type" := Decode.string) `Decode.andThen` decodeMessageBodyType)
+    (Result.fromMaybe "Could not decode message body")
+
+decodeMessageBodyType : String -> Decoder (Maybe MessageBody)
+decodeMessageBodyType kind =
+  case kind of
+    "Post" ->
+      decode (Just << Post)
+        |> required "value" Decode.string
+
+    "Join" ->
+      decode (Just << Join)
+        |> required "value" Decode.string
+    _ -> decode Nothing
 
 
 
@@ -102,14 +142,28 @@ type OutputMsg
   = Init Model
   | Connection Socket
   | Disconnection Socket
-  | Message (Socket, Encode.Value)
+  | Message (Socket, MessageBody)
 
-encodeMessage : (Socket, Encode.Value) -> Encode.Value
-encodeMessage (socket, message) =
+encodeInitPost : (Socket, String) -> Encode.Value
+encodeInitPost (socket, post) =
   Encode.object
     [ ("id", Encode.string socket)
-    , ("message", message)
+    , ("post", Encode.string post)
     ]
+
+encodeMessageBody : MessageBody -> Encode.Value
+encodeMessageBody body =
+  case body of
+    Post post ->
+      Encode.object
+        [ ("type", Encode.string "Post")
+        , ("value", Encode.string post)
+        ]
+    Join name ->
+      Encode.object
+        [ ("type", Encode.string "Join")
+        , ("value", Encode.string name)
+        ]
 
 encodeMsg : OutputMsg -> Encode.Value
 encodeMsg msg =
@@ -117,8 +171,9 @@ encodeMsg msg =
     Init model ->
       Encode.object
         [ ("type", Encode.string "Init")
-        , ("messages", Encode.list (List.map encodeMessage model.messages) )
         , ("connections", Encode.list (List.map Encode.string (Set.toList model.connections)) )
+        , ("posts", Encode.list (List.map encodeInitPost model.posts) )
+        , ("users", Encode.object (Dict.toList (Dict.map (always Encode.string) model.users)) )
         ]
     Connection socket ->
       Encode.object
@@ -130,9 +185,9 @@ encodeMsg msg =
         [ ("type", Encode.string "Disconnection")
         , ("id", Encode.string socket)
         ]
-    Message (socket, message) ->
+    Message (socket, body) ->
       Encode.object
         [ ("type", Encode.string "Message")
         , ("id", Encode.string socket)
-        , ("message", message)
+        , ("message", encodeMessageBody body)
         ]

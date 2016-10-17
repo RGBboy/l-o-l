@@ -13,6 +13,8 @@ import Json.Decode as Decode exposing (Decoder, (:=))
 import Json.Decode.Pipeline exposing (custom, decode, required)
 import Json.Encode as Encode
 
+
+
 main =
   Html.program
     { init = init
@@ -39,26 +41,27 @@ type MessageBody
   = Post String
   | Join String
 
-type alias Message = (Socket, MessageBody)
-
 type alias Model =
   { input: String
   , posts: List (Socket, String)
-  , connections: Dict Socket String
+  , connections: Set Socket
+  , users: Dict Socket String
   , name: String
   , status: Status
   }
 
 type alias ServerModel =
-  { messages: List Message
-  , connections: List Socket
+  { connections: Set Socket
+  , posts: List (Socket, String)
+  , users: Dict Socket String
   }
 
 init : (Model, Cmd Msg)
 init =
   ( { input = ""
     , posts = []
-    , connections = Dict.empty
+    , connections = Set.empty
+    , users = Dict.empty
     , name = ""
     , status = Disconnected
     }
@@ -80,20 +83,8 @@ type Msg
   | Disconnection Socket
   | NameIn Socket String
   | NameOut String
-  | MessageIn Message
-  | Error
-
-
-reduceInit : (Socket, MessageBody) -> (List (Socket, String), Dict Socket String) -> (List (Socket, String), Dict Socket String)
-reduceInit (socket, body) (posts, connections) =
-  case body of
-    Post message ->
-      ((socket, message) :: posts, connections)
-    Join name ->
-      (posts, Dict.insert socket name connections)
-
-keyValueTuple : k -> (k, String)
-keyValueTuple k = (k, "")
+  | Message (Socket, MessageBody)
+  | Noop
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update message model =
@@ -122,31 +113,32 @@ update message model =
       , Cmd.none
       )
     Init init ->
-      let
-        (posts, connections) = List.foldl reduceInit (model.posts, Dict.fromList (List.map keyValueTuple init.connections)) init.messages
-      in
-        ( { model
-          | connections = connections
-          , posts = posts
-          }
-        , Cmd.none
-        )
+      ( { model
+        | connections = init.connections
+        , posts = init.posts
+        , users = init.users
+        }
+      , Cmd.none
+      )
     Connection socket ->
-      ( { model | connections = Dict.insert socket "" model.connections }
+      ( { model
+        | connections = Set.insert socket model.connections
+        , users = Dict.insert socket "" model.users
+        }
       , Cmd.none
       )
     Disconnection socket ->
-      ( { model | connections = Dict.remove socket model.connections }
+      ( { model | connections = Set.remove socket model.connections }
       , Cmd.none
       )
-    MessageIn (socket, body) ->
+    Message (socket, body) ->
       case body of
         Post post ->
           ( { model | posts = (socket, post) :: model.posts }
           , Cmd.none
           )
         Join name ->
-          ( { model | connections = Dict.insert socket name model.connections }
+          ( { model | users = Dict.insert socket name model.users }
           , Cmd.none
           )
     _ -> (model, Cmd.none)
@@ -159,12 +151,12 @@ encode : MessageBody -> String
 encode = encodeMessageBody >> (Encode.encode 2)
 
 encodeMessageBody : MessageBody -> Encode.Value
-encodeMessageBody message =
-  case message of
-    Post message ->
+encodeMessageBody body =
+  case body of
+    Post post ->
       Encode.object
         [ ("type", Encode.string "Post")
-        , ("value", Encode.string message)
+        , ("value", Encode.string post)
         ]
     Join name ->
       Encode.object
@@ -174,30 +166,39 @@ encodeMessageBody message =
 
 decodeInput : String -> Msg
 decodeInput value =
-  Result.withDefault Error (Decode.decodeString msgDecoder value)
+  Result.withDefault Noop (Decode.decodeString decodeMsg value)
 
-msgDecoder : Decoder Msg
-msgDecoder =
-  ("type" := Decode.string) `Decode.andThen` msgTypeDecoder
+decodeMsg : Decoder Msg
+decodeMsg =
+  Decode.customDecoder
+    (("type" := Decode.string) `Decode.andThen` decodeMsgType)
+    (Result.fromMaybe "Could not decode msg")
 
-msgTypeDecoder : String -> Decoder Msg
-msgTypeDecoder kind =
+decodeMsgType : String -> Decoder (Maybe Msg)
+decodeMsgType kind =
   case kind of
     "Init" ->
-      Decode.map Init
-        (decode ServerModel
-          |> required "messages" (Decode.list decodeMessage)
-          |> required "connections" (Decode.list Decode.string))
+      decode (Just << Init)
+        |> custom (decode ServerModel
+          |> required "connections" (decode Set.fromList |> custom (Decode.list Decode.string))
+          |> required "posts" (Decode.list decodeInitPost)
+          |> required "users" (Decode.dict Decode.string))
     "Connection" ->
-      decode Connection
+      decode (Just << Connection)
         |> required "id" Decode.string
     "Disconnection" ->
-      decode Disconnection
+      decode (Just << Disconnection)
         |> required "id" Decode.string
     "Message" ->
-      decode MessageIn
+      decode (Just << Message)
         |> custom decodeMessage
-    _ -> decode Error
+    _ -> decode Nothing
+
+decodeInitPost : Decoder (Socket, String)
+decodeInitPost =
+  decode (,)
+    |> required "id" Decode.string
+    |> required "post" Decode.string
 
 decodeMessage : Decoder (Socket, MessageBody)
 decodeMessage =
@@ -223,7 +224,6 @@ decodeMessageBodyType kind =
         |> required "value" Decode.string
     _ -> decode Nothing
 
-
 subscriptions : Model -> Sub Msg
 subscriptions model =
   if model.status == Connected then
@@ -235,13 +235,10 @@ subscriptions model =
 
 -- VIEW
 
-connectionView : (Socket, String) -> Html Msg
-connectionView (_, name) =
+connectionView : Dict Socket String -> Socket -> Html Msg
+connectionView names socket =
   let
-    name' =
-      if (name == "") then
-        "Unknown"
-      else name
+    name' = Maybe.withDefault "Unknown" (Dict.get socket names)
   in
     H.div []
       [ H.span []
@@ -249,33 +246,33 @@ connectionView (_, name) =
           ]
       ]
 
-connectionsView : Dict Socket String -> Html Msg
-connectionsView connections =
+connectionsView : Dict Socket String -> Set Socket -> Html Msg
+connectionsView names connections =
   H.div []
     [ H.div []
         [ H.h2 []
-            [ H.text "Users"
+            [ H.text "Users Online"
             ]
         ]
     , H.div []
-        (List.map connectionView (Dict.toList connections))
+        (List.map (connectionView names) (Set.toList connections))
     ]
 
 postView : Dict Socket String -> (Socket, String) -> Html Msg
-postView connections (socket, post) =
+postView users (socket, post) =
   let
-    name = Maybe.withDefault socket (Dict.get socket connections)
+    name' = Maybe.withDefault "Unknown" (Dict.get socket users)
   in
     H.div []
       [ H.span []
-          [ H.text name
+          [ H.text name'
           , H.text ": "
           , H.text post
           ]
       ]
 
 postsView : Dict Socket String -> List (Socket, String) -> Html Msg
-postsView connections messages =
+postsView users messages =
   H.div []
     [ H.div []
         [ H.h2 []
@@ -283,7 +280,7 @@ postsView connections messages =
             ]
         ]
     , H.div []
-        (List.map (postView connections) messages)
+        (List.map (postView users) messages)
     ]
 
 onEnter : Msg -> H.Attribute Msg
@@ -301,8 +298,8 @@ is13 code =
 connectedView : Model -> Html Msg
 connectedView model =
   H.div []
-    [ connectionsView model.connections
-    , postsView model.connections model.posts
+    [ connectionsView model.users model.connections
+    , postsView model.users model.posts
     , H.input
         [ A.placeholder "Message..."
         , A.value model.input

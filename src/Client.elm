@@ -10,8 +10,9 @@ import Dict exposing (Dict)
 import Result exposing (Result)
 
 import Json.Decode as Decode exposing (Decoder, (:=))
-import Json.Decode.Pipeline exposing (custom, decode, required)
 import Json.Encode as Encode
+
+import Chat
 
 
 
@@ -31,37 +32,21 @@ server =
 
 -- MODEL
 
-type alias User = String
-
 type Status
   = Disconnected
   | Connected
 
-type MessageBody
-  = Post String
-  | Join String
-
 type alias Model =
-  { input: String
-  , posts: List (Socket, String)
-  , connections: Set Socket
-  , users: Dict Socket String
+  { chat: Chat.Model
+  , input: String
   , name: String
   , status: Status
   }
 
-type alias ServerModel =
-  { connections: Set Socket
-  , posts: List (Socket, String)
-  , users: Dict Socket String
-  }
-
 init : (Model, Cmd Msg)
 init =
-  ( { input = ""
-    , posts = []
-    , connections = Set.empty
-    , users = Dict.empty
+  ( { chat = Chat.init
+    , input = ""
     , name = ""
     , status = Disconnected
     }
@@ -78,12 +63,7 @@ type Msg
   | InputName String
   | Connect
   | Disconnect
-  | Init ServerModel
-  | Connection Socket
-  | Disconnection Socket
-  | NameIn Socket String
-  | NameOut String
-  | Message (Socket, MessageBody)
+  | Message Chat.Msg
   | Noop
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -95,7 +75,7 @@ update message model =
       )
     Send ->
       ( { model | input = "" }
-      ,  WebSocket.send server (encode (Post model.input))
+      ,  WebSocket.send server (encodeValue "Post" model.input)
       )
     InputName value ->
       ( { model | name = value }
@@ -106,128 +86,34 @@ update message model =
           | name = ""
           , status = Connected
         }
-      , WebSocket.send server (encode (Join model.name))
+      , WebSocket.send server (encodeValue "Join" model.name)
       )
     Disconnect ->
       ( { model | status = Disconnected }
       , Cmd.none
       )
-    Init init ->
-      ( { model
-        | connections = init.connections
-        , posts = init.posts
-        , users = init.users
-        }
+    Message message ->
+      ( { model | chat = Chat.update message model.chat }
       , Cmd.none
       )
-    Connection socket ->
-      ( { model
-        | connections = Set.insert socket model.connections
-        , users = Dict.insert socket "" model.users
-        }
-      , Cmd.none
-      )
-    Disconnection socket ->
-      ( { model | connections = Set.remove socket model.connections }
-      , Cmd.none
-      )
-    Message (socket, body) ->
-      case body of
-        Post post ->
-          ( { model | posts = (socket, post) :: model.posts }
-          , Cmd.none
-          )
-        Join name ->
-          ( { model | users = Dict.insert socket name model.users }
-          , Cmd.none
-          )
     _ -> (model, Cmd.none)
 
 
 
 -- SUBSCRIPTIONS
 
-encode : MessageBody -> String
-encode = encodeMessageBody >> (Encode.encode 2)
-
-encodeMessageBody : MessageBody -> Encode.Value
-encodeMessageBody body =
-  case body of
-    Post post ->
-      Encode.object
-        [ ("type", Encode.string "Post")
-        , ("value", Encode.string post)
-        ]
-    Join name ->
-      Encode.object
-        [ ("type", Encode.string "Join")
-        , ("value", Encode.string name)
-        ]
-
-decodeInput : String -> Msg
-decodeInput value =
-  Result.withDefault Noop (Decode.decodeString decodeMsg value)
-
-decodeMsg : Decoder Msg
-decodeMsg =
-  Decode.customDecoder
-    (("type" := Decode.string) `Decode.andThen` decodeMsgType)
-    (Result.fromMaybe "Could not decode msg")
-
-decodeMsgType : String -> Decoder (Maybe Msg)
-decodeMsgType kind =
-  case kind of
-    "Init" ->
-      decode (Just << Init)
-        |> custom (decode ServerModel
-          |> required "connections" (decode Set.fromList |> custom (Decode.list Decode.string))
-          |> required "posts" (Decode.list decodeInitPost)
-          |> required "users" (Decode.dict Decode.string))
-    "Connection" ->
-      decode (Just << Connection)
-        |> required "id" Decode.string
-    "Disconnection" ->
-      decode (Just << Disconnection)
-        |> required "id" Decode.string
-    "Message" ->
-      decode (Just << Message)
-        |> custom decodeMessage
-    _ -> decode Nothing
-
-decodeInitPost : Decoder (Socket, String)
-decodeInitPost =
-  decode (,)
-    |> required "id" Decode.string
-    |> required "post" Decode.string
-
-decodeMessage : Decoder (Socket, MessageBody)
-decodeMessage =
-  decode (,)
-    |> required "id" Decode.string
-    |> required "message" decodeMessageBody
-
-decodeMessageBody : Decoder MessageBody
-decodeMessageBody =
-  Decode.customDecoder
-    (("type" := Decode.string) `Decode.andThen` decodeMessageBodyType)
-    (Result.fromMaybe "Could not decode message body")
-
-decodeMessageBodyType : String -> Decoder (Maybe MessageBody)
-decodeMessageBodyType kind =
-  case kind of
-    "Post" ->
-      decode (Just << Post)
-        |> required "value" Decode.string
-
-    "Join" ->
-      decode (Just << Join)
-        |> required "value" Decode.string
-    _ -> decode Nothing
+encodeValue : String -> String -> String
+encodeValue kind value =
+  Encode.object
+    [ ("type", Encode.string kind)
+    , ("value", Encode.string value)
+    ]
+  |> Encode.encode 2
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
   if model.status == Connected then
-    WebSocket.listen server decodeInput
+    Sub.map Message (WebSocket.listen server Chat.decodeMessage)
   else
     Sub.none
 
@@ -298,8 +184,8 @@ is13 code =
 connectedView : Model -> Html Msg
 connectedView model =
   H.div []
-    [ connectionsView model.users model.connections
-    , postsView model.users model.posts
+    [ connectionsView model.chat.users model.chat.connections
+    , postsView model.chat.users model.chat.posts
     , H.input
         [ A.placeholder "Message..."
         , A.value model.input

@@ -1,9 +1,11 @@
 module WebSocketServer exposing
   ( Socket
-  , Event(Connection, Disconnection, Message, Error)
+  , Event
   , close
   , sendToOne
   , sendToMany
+  , Update
+  , update
   , decodeEvent
   )
 
@@ -21,6 +23,19 @@ type Event a
   | Message Socket a
   | Error
 
+type alias Update a b msg =
+  { onConnection : Socket -> a -> (a, Cmd msg)
+  , onDisconnection: Socket -> a -> (a, Cmd msg)
+  , onMessage : Socket -> b -> a -> (a, Cmd msg)
+  }
+
+update : Update a b msg -> Event b -> a -> (a, Cmd msg)
+update config message model =
+  case message of
+    Connection socket -> config.onConnection socket model
+    Disconnection socket -> config.onDisconnection socket model
+    Message socket message -> config.onMessage socket message model
+    Error -> (model, Cmd.none)
 
 -- COMMANDS
 

@@ -47,20 +47,21 @@ type ClientInput
 
 init : (Model, Cmd msg)
 init =
-  ( Chat.init
-  , Cmd.none)
+  (Chat.init, Cmd.none)
 
 
 
 -- UPDATE
 
+updateConfig : WSS.Update Model ClientInput msg
+updateConfig =
+  { onConnection = onConnection
+  , onDisconnection = onDisconnection
+  , onMessage = onMessage
+  }
+
 update : WSS.Event ClientInput -> Model -> (Model, Cmd msg)
-update message model =
-  case message of
-    WSS.Connection socket -> onConnection socket model
-    WSS.Disconnection socket -> onDisconnection socket model
-    WSS.Message socket message -> onMessage socket message model
-    WSS.Error -> (model, Cmd.none)
+update = WSS.update updateConfig
 
 onConnection : Socket -> Model -> (Model, Cmd msg)
 onConnection socket model =

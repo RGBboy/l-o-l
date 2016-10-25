@@ -33,6 +33,9 @@ init =
   , users = Dict.empty
   }
 
+maxPosts : Int
+maxPosts = 4
+
 
 
 -- UPDATE
@@ -57,7 +60,10 @@ update message model =
     Disconnection socket ->
       { model | connections = Set.remove socket model.connections }
     Post socket post ->
-      { model | posts = (socket, post) :: model.posts }
+      let
+        newPosts = (socket, post) :: model.posts
+      in
+        { model | posts = List.take maxPosts newPosts }
     Join socket name ->
       { model | users = Dict.insert socket name model.users }
     _ -> model

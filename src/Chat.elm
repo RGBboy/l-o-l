@@ -58,15 +58,34 @@ update message model =
       , users = Dict.insert socket "" model.users
       }
     Disconnection socket ->
-      { model | connections = Set.remove socket model.connections }
+      let
+        connections = Set.remove socket model.connections
+      in
+        { model
+        | connections = connections
+        , users = calcUsers model.posts connections model.users
+        }
     Post socket post ->
       let
-        newPosts = (socket, post) :: model.posts
+        newPosts = List.take maxPosts <| (socket, post) :: model.posts
       in
-        { model | posts = List.take maxPosts newPosts }
+        { model | posts = newPosts }
     Join socket name ->
       { model | users = Dict.insert socket name model.users }
     _ -> model
+
+toEmptyTuple : Socket -> (Socket, String)
+toEmptyTuple socket = (socket, "")
+
+-- filter users to only those that exist in either posts or connections
+calcUsers : List (Socket, String) -> Set Socket -> Dict Socket String -> Dict Socket String
+calcUsers posts connections users =
+  let
+    postDict = Dict.fromList posts
+    connectionsDict = Set.toList connections |> List.map toEmptyTuple |> Dict.fromList
+    unionDict = Dict.union postDict connectionsDict
+  in
+    Dict.intersect users unionDict
 
 
 

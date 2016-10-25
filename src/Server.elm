@@ -42,8 +42,8 @@ port outputWSS : Encode.Value -> Cmd msg
 type alias Model = Chat.Model
 
 type ClientInput
-  = Post String
-  | Join String
+  = ClientPost String
+  | ClientJoin String
 
 init : (Model, Cmd msg)
 init =
@@ -79,6 +79,7 @@ onConnection socket model =
 
 onDisconnection : Socket -> Model -> (Model, Cmd msg)
 onDisconnection socket model =
+  -- Handle if we closed the connection immediately
   if (Set.member socket model.connections) then
     ( Chat.update (Chat.Disconnection socket) model
     , sendToMany outputWSS (Chat.encodeMessage (Chat.Disconnection socket)) (Set.toList model.connections)
@@ -89,11 +90,11 @@ onDisconnection socket model =
 onMessage : Socket -> ClientInput -> Model -> (Model, Cmd msg)
 onMessage socket message model =
   case message of
-    Post post ->
+    ClientPost post ->
       ( Chat.update (Chat.Post socket post) model
       , sendToMany outputWSS (Chat.encodeMessage (Chat.Post socket post)) (Set.toList model.connections)
       )
-    Join name ->
+    ClientJoin name ->
       ( Chat.update (Chat.Join socket name) model
       , sendToMany outputWSS (Chat.encodeMessage (Chat.Join socket name)) (Set.toList model.connections)
       )
@@ -115,10 +116,10 @@ decodeClientInputType : String -> Decoder (Maybe ClientInput)
 decodeClientInputType kind =
   case kind of
     "Post" ->
-      decode (Just << Post)
+      decode (Just << ClientPost)
         |> required "value" Decode.string
 
     "Join" ->
-      decode (Just << Join)
+      decode (Just << ClientJoin)
         |> required "value" Decode.string
     _ -> decode Nothing

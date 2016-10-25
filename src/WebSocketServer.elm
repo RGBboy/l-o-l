@@ -4,6 +4,7 @@ module WebSocketServer exposing
   , close
   , sendToOne
   , sendToMany
+  , sendToOthers
   , Update
   , update
   , decodeEvent
@@ -50,6 +51,13 @@ sendToOne outputPort message socket =
 sendToMany : (Encode.Value -> Cmd msg) -> Encode.Value -> List Socket -> Cmd msg
 sendToMany outputPort message sockets =
   Cmd.batch (List.map (sendToOne outputPort message) sockets)
+
+sendToOthers : (Encode.Value -> Cmd msg) -> Encode.Value -> Socket -> List Socket -> Cmd msg
+sendToOthers outputPort message socket sockets =
+  let
+    others = List.filter ((==) socket) sockets
+  in
+    sendToMany outputPort message others
 
 encodeClose : Socket -> Encode.Value
 encodeClose socket =

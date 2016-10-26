@@ -3,6 +3,7 @@ checkout:
     - mv heroku.gitignore .gitignore
     - git config user.email "l-_-l@rgbboy.com"
     - git config user.name "RGBboy"
+    - git add -A
     - git commit -am 'deploy'
 dependencies:
   cache_directories:

@@ -17,16 +17,12 @@ import Chat
 
 
 main =
-  Html.program
+  Html.programWithFlags
     { init = init
     , view = view
     , update = update
     , subscriptions = subscriptions
     }
-
-server : String
-server =
-  "ws://localhost:8080"
 
 
 
@@ -37,15 +33,17 @@ type Status
   | Connected
 
 type alias Model =
-  { chat: Maybe Chat.Model
+  { server: String
+  , chat: Maybe Chat.Model
   , input: String
   , name: String
   , status: Status
   }
 
-init : (Model, Cmd Msg)
-init =
-  ( { chat = Nothing
+init : String -> (Model, Cmd Msg)
+init server =
+  ( { server = server
+    , chat = Nothing
     , input = ""
     , name = ""
     , status = Disconnected
@@ -81,7 +79,7 @@ update message model =
             | input = ""
             , chat = Just (Chat.update (Chat.OptimisticPost chat.socket model.input) chat)
             }
-          ,  WebSocket.send server (encodeValue "Post" model.input)
+          ,  WebSocket.send model.server (encodeValue "Post" model.input)
           )
     InputName value ->
       ( { model | name = value }
@@ -92,7 +90,7 @@ update message model =
           | name = ""
           , status = Connected
         }
-      , WebSocket.send server (encodeValue "Join" model.name)
+      , WebSocket.send model.server (encodeValue "Join" model.name)
       )
     Disconnect ->
       ( { model
@@ -128,7 +126,7 @@ encodeValue kind value =
 subscriptions : Model -> Sub Msg
 subscriptions model =
   if model.status == Connected then
-    Sub.map Message (WebSocket.listen server Chat.decodeMessage)
+    Sub.map Message (WebSocket.listen model.server Chat.decodeMessage)
   else
     Sub.none
 

@@ -37,7 +37,7 @@ type Status
   | Connected
 
 type alias Model =
-  { chat: Chat.Model
+  { chat: Maybe Chat.Model
   , input: String
   , name: String
   , status: Status
@@ -45,7 +45,7 @@ type alias Model =
 
 init : (Model, Cmd Msg)
 init =
-  ( { chat = Chat.init
+  ( { chat = Nothing
     , input = ""
     , name = ""
     , status = Disconnected
@@ -74,9 +74,15 @@ update message model =
       , Cmd.none
       )
     Send ->
-      ( { model | input = "" }
-      ,  WebSocket.send server (encodeValue "Post" model.input)
-      )
+      case model.chat of
+        Nothing -> (model, Cmd.none)
+        Just chat ->
+          ( { model
+            | input = ""
+            , chat = Just (Chat.update (Chat.OptimisticPost chat.socket model.input) chat)
+            }
+          ,  WebSocket.send server (encodeValue "Post" model.input)
+          )
     InputName value ->
       ( { model | name = value }
       , Cmd.none
@@ -89,13 +95,22 @@ update message model =
       , WebSocket.send server (encodeValue "Join" model.name)
       )
     Disconnect ->
-      ( { model | status = Disconnected }
+      ( { model
+        | status = Disconnected
+        , chat = Nothing
+        }
       , Cmd.none
       )
     Message message ->
-      ( { model | chat = Chat.update message model.chat }
-      , Cmd.none
-      )
+      case model.chat of
+        Nothing ->
+          ( { model | chat = Just (Chat.update message Chat.init) }
+          , Cmd.none
+          )
+        Just chat ->
+          ( { model | chat = Just (Chat.update message chat) }
+          , Cmd.none
+          )
     _ -> (model, Cmd.none)
 
 
@@ -132,8 +147,8 @@ connectionView names socket =
           ]
       ]
 
-connectionsView : Dict Socket String -> Set Socket -> Html Msg
-connectionsView names connections =
+connectionsView : Chat.Model -> Html Msg
+connectionsView chat =
   H.div []
     [ H.div []
         [ H.h2 []
@@ -141,7 +156,7 @@ connectionsView names connections =
             ]
         ]
     , H.div []
-        (List.map (connectionView names) (Set.toList connections))
+        (List.map (connectionView chat.users) (Set.toList chat.connections))
     ]
 
 postView : Dict Socket String -> (Socket, String) -> Html Msg
@@ -157,17 +172,20 @@ postView users (socket, post) =
           ]
       ]
 
-postsView : Dict Socket String -> List (Socket, String) -> Html Msg
-postsView users messages =
-  H.div []
-    [ H.div []
-        [ H.h2 []
-            [ H.text "Messages"
-            ]
-        ]
-    , H.div []
-        (List.map (postView users) messages)
-    ]
+postsView : Chat.Model -> Html Msg
+postsView chat =
+  let
+    posts = List.append chat.optimisticPosts chat.posts
+  in
+    H.div []
+      [ H.div []
+          [ H.h2 []
+              [ H.text "Messages"
+              ]
+          ]
+      , H.div []
+          (List.map (postView chat.users) posts)
+      ]
 
 onEnter : Msg -> H.Attribute Msg
 onEnter message =
@@ -181,19 +199,25 @@ is13 : Int -> Result String ()
 is13 code =
   if code == 13 then Ok () else Err "not the right key code"
 
+maybeToList : Maybe a -> List a
+maybeToList maybe =
+  case maybe of
+    Just a -> [a]
+    Nothing -> []
+
 connectedView : Model -> Html Msg
 connectedView model =
-  H.div []
-    [ connectionsView model.chat.users model.chat.connections
-    , postsView model.chat.users model.chat.posts
-    , H.input
-        [ A.placeholder "Message..."
-        , A.value model.input
-        , E.onInput Input
-        , onEnter Send
-        ]
-        []
+  H.div [] <|
+  List.append (maybeToList (Maybe.map postsView model.chat)) <|
+  List.append (maybeToList (Maybe.map connectionsView model.chat)) <|
+  [ H.input
+    [ A.placeholder "Message..."
+    , A.value model.input
+    , E.onInput Input
+    , onEnter Send
     ]
+    []
+  ]
 
 disconnectedView : Model -> Html Msg
 disconnectedView model =

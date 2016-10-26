@@ -2,13 +2,15 @@ module Chat exposing
   ( Model
   , init
   , update
-  , Msg(Init, Connection, Disconnection, Post, Join)
+  , updateSocket
+  , Msg(Init, Connection, Disconnection, Post, OptimisticPost, Join)
   , encodeMessage
   , decodeMessage
   )
 
 import WebSocketServer as WSS exposing (Socket)
 
+import List.Extra as ListExtra
 import Set exposing (Set)
 import Dict exposing (Dict)
 
@@ -21,15 +23,28 @@ import Json.Encode as Encode
 -- MODEL
 
 type alias Model =
-  { connections: Set Socket
+  { socket: Socket
+  , connections: Set Socket
   , posts: List (Socket, String)
+  , optimisticPosts: List (Socket, String)
   , users: Dict Socket String
+  }
+
+createModel : Socket -> Set Socket -> List (Socket, String) -> Dict Socket String -> Model
+createModel socket connections posts users =
+  { socket = socket
+  , connections = connections
+  , posts = posts
+  , optimisticPosts = []
+  , users = users
   }
 
 init : Model
 init =
-  { posts = []
+  { socket = ""
   , connections = Set.empty
+  , posts = []
+  , optimisticPosts = []
   , users = Dict.empty
   }
 
@@ -45,8 +60,17 @@ type Msg
   | Connection Socket
   | Disconnection Socket
   | Post Socket String
+  | OptimisticPost Socket String
   | Join Socket String
   | Noop
+
+removeFirst : (a -> Bool) -> List a -> List a
+removeFirst predicate list =
+  let
+    (h, t) = ListExtra.break predicate list
+    tail = Maybe.withDefault [] (List.tail t)
+  in
+    List.append h tail
 
 update : Msg -> Model -> Model
 update message model =
@@ -65,14 +89,23 @@ update message model =
         | connections = connections
         , users = calcUsers model.posts connections model.users
         }
-    Post socket post ->
+    Post socket post' ->
       let
-        newPosts = List.take maxPosts <| (socket, post) :: model.posts
+        post = (socket, post')
       in
-        { model | posts = newPosts }
+        { model
+        | posts = List.take maxPosts <| post :: model.posts
+        , optimisticPosts = removeFirst ((==) post) model.optimisticPosts
+        }
+    OptimisticPost socket post ->
+      { model | optimisticPosts = (socket, post) :: model.optimisticPosts }
     Join socket name ->
       { model | users = Dict.insert socket name model.users }
     _ -> model
+
+updateSocket : Socket -> Model -> Model
+updateSocket socket model =
+  { model | socket = socket }
 
 toEmptyTuple : Socket -> (Socket, String)
 toEmptyTuple socket = (socket, "")
@@ -97,6 +130,7 @@ encodeMessage msg =
     Init model ->
       Encode.object
         [ ("type", Encode.string "Init")
+        , ("socket", Encode.string model.socket)
         , ("connections", Encode.list (List.map Encode.string (Set.toList model.connections)) )
         , ("posts", Encode.list (List.map encodeInitPost model.posts) )
         , ("users", Encode.object (Dict.toList (Dict.map (always Encode.string) model.users)) )
@@ -151,7 +185,8 @@ decodeMsgType kind =
   case kind of
     "Init" ->
       decode (Just << Init)
-        |> custom (decode Model
+        |> custom (decode createModel
+          |> required "socket" Decode.string
           |> required "connections" (decode Set.fromList |> custom (Decode.list Decode.string))
           |> required "posts" (Decode.list decodeInitPost)
           |> required "users" (Decode.dict Decode.string))

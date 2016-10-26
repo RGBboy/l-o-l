@@ -67,7 +67,7 @@ onConnection : Socket -> Model -> (Model, Cmd msg)
 onConnection socket model =
   if (Set.size model.connections) <= maxConnections then
     let
-      newModel = Chat.update (Chat.Connection socket) model
+      newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket) model) 
     in
       ( newModel
       , Cmd.batch

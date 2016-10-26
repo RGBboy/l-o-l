@@ -1,5 +1,8 @@
+test:
+  post:
+    - npm run build
 deployment:
-  staging:
+  production:
     branch: master
     heroku:
       appname: l-o-l

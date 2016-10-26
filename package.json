@@ -10,6 +10,7 @@
   "private": true,
   "main": "./lib/server",
   "scripts": {
+    "postinstall": "elm package install --yes",
     "start": "node ./lib/server",
     "bundle": "uglifyjs ./build/client.js -c warnings=false -m -o ./public/client.js",
     "build": "npm run build:client && npm run build:server && npm run bundle",
@@ -24,6 +25,7 @@
     "ws": "^1.0.0"
   },
   "devDependencies": {
+    "elm": "^0.17.1",
     "uglify-js": "^2.6.1"
   },
   "license": "ISC"

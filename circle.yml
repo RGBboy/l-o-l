@@ -5,6 +5,9 @@ checkout:
     - git config user.name "RGBboy"
     - git commit -am 'deploy'
 dependencies:
+  cache_directories:
+    - "node_modules"
+    - "elm-stuff"
   post:
     - elm package install --yes
     - npm run build

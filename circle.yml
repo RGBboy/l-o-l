@@ -1,5 +1,6 @@
 test:
   post:
+    - elm package install --yes
     - npm run build
 deployment:
   production:

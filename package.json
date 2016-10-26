@@ -10,7 +10,6 @@
   "private": true,
   "main": "./lib/server",
   "scripts": {
-    "postinstall": "elm package install --yes",
     "start": "node ./lib/server",
     "bundle": "uglifyjs ./build/client.js -c warnings=false -m -o ./public/client.js",
     "build": "npm run build:client && npm run build:server && npm run bundle",

@@ -1,7 +1,9 @@
 checkout:
   post:
     - mv heroku.gitignore .gitignore
-    - git commit -am 'deploy' --author="RGBboy <l-_-l@rgbboy.com>"
+    - git config user.email "l-_-l@rgbboy.com"
+    - git config user.name "RGBboy"
+    - git commit -am 'deploy'
 dependencies:
   post:
     - elm package install --yes

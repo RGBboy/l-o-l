@@ -16,4 +16,3 @@ deployment:
       - git add -A
       - git commit -am 'deploy'
       - git push -f git@heroku.com:l-o-l.git
-      - heroku run "npm start" --app l-o-l

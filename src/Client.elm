@@ -8,6 +8,7 @@ import WebSocketServer exposing (Socket)
 import Set exposing (Set)
 import Dict exposing (Dict)
 import Result exposing (Result)
+import Time exposing (Time)
 
 import Json.Decode as Decode exposing (Decoder, (:=))
 import Json.Encode as Encode
@@ -38,6 +39,7 @@ type alias Model =
   , input: String
   , name: String
   , status: Status
+  , time: Time
   }
 
 init : String -> (Model, Cmd Msg)
@@ -47,6 +49,7 @@ init server =
     , input = ""
     , name = ""
     , status = Disconnected
+    , time = 0
     }
   , Cmd.none
   )
@@ -62,6 +65,7 @@ type Msg
   | Connect
   | Disconnect
   | Message Chat.Msg
+  | Tick Time
   | Noop
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -109,6 +113,10 @@ update message model =
           ( { model | chat = Just (Chat.update message chat) }
           , Cmd.none
           )
+    Tick time ->
+      ( { model | time = time }
+      , Cmd.none
+      )
     _ -> (model, Cmd.none)
 
 
@@ -126,9 +134,12 @@ encodeValue kind value =
 subscriptions : Model -> Sub Msg
 subscriptions model =
   if model.status == Connected then
-    Sub.map Message (WebSocket.listen model.server Chat.decodeMessage)
+    Sub.batch
+      [ Sub.map Message (WebSocket.listen model.server Chat.decodeMessage)
+      , Time.every (100 * Time.millisecond) Tick
+      ]
   else
-    Sub.none
+    Time.every (100 * Time.millisecond) Tick
 
 
 
@@ -242,6 +253,13 @@ view model =
       case model.status of
         Connected -> connectedView model
         Disconnected -> disconnectedView model
+    frame = ((Time.inMilliseconds model.time) / 100 |> round |> (%)) 50
+    title =
+      case frame of
+        3 -> "l-•-l"
+        2 -> "l-o-l"
+        1 -> "l-•-l"
+        _ -> "l-o-l"
   in
     H.div
       [ A.class "flex flex-column justify-center h-100 mw6 center" ]

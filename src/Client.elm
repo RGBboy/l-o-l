@@ -267,7 +267,7 @@ view model =
           [ A.class "flex flex-column h5 " ]
           [ H.h1
               [ A.class "f2 tc mb2" ]
-              [ H.text "l-o-l" ]
+              [ H.text title ]
           , subview
           ]
       ]

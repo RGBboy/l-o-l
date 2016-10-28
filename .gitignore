@@ -3,3 +3,9 @@ elm-stuff
 node_modules
 public/*
 !public/index.html
+!public/apple-touch-icon-57x57-precomposed.png
+!public/apple-touch-icon-72x72-precomposed.png
+!public/apple-touch-icon-114x114-precomposed.png
+!public/apple-touch-icon-precomposed.png
+!public/apple-touch-icon.png
+!public/faviocon.ico

@@ -147,15 +147,7 @@ connectionView names socket =
 
 connectionsView : Chat.Model -> Html Msg
 connectionsView chat =
-  H.div []
-    [ H.div []
-        [ H.h2 []
-            [ H.text "Users Online"
-            ]
-        ]
-    , H.div []
-        (List.map (connectionView chat.users) (Set.toList chat.connections))
-    ]
+    H.div [] (List.map (connectionView chat.users) (Set.toList chat.connections))
 
 postView : Dict Socket String -> (Socket, String) -> Html Msg
 postView users (socket, post) =
@@ -163,11 +155,16 @@ postView users (socket, post) =
     name' = Maybe.withDefault "Unknown" (Dict.get socket users)
   in
     H.div []
-      [ H.span []
+      [ H.span
+          [ A.class "db f6 b mt2 mb1 mid-gray" ]
           [ H.text name'
-          , H.text ": "
-          , H.text post
+          , H.text ":"
           ]
+      , H.span
+          [ A.class "db pl2"
+          , A.style [ ("word-break", "break-all") ] -- tachyons doesn't have flex reverse
+          ]
+          [ H.text post ]
       ]
 
 postsView : Chat.Model -> Html Msg
@@ -175,15 +172,11 @@ postsView chat =
   let
     posts = List.append chat.optimisticPosts chat.posts
   in
-    H.div []
-      [ H.div []
-          [ H.h2 []
-              [ H.text "Messages"
-              ]
-          ]
-      , H.div []
-          (List.map (postView chat.users) posts)
+    H.div
+      [ A.class "flex h4 pa2 overflow-container"
+      , A.style [ ("flex-direction", "column-reverse") ] -- tachyons doesn't have flex reverse
       ]
+      (List.map (postView chat.users) posts)
 
 onEnter : Msg -> H.Attribute Msg
 onEnter message =
@@ -205,23 +198,36 @@ maybeToList maybe =
 
 connectedView : Model -> Html Msg
 connectedView model =
-  H.div [] <|
-  List.append (maybeToList (Maybe.map postsView model.chat)) <|
-  List.append (maybeToList (Maybe.map connectionsView model.chat)) <|
-  [ H.input
-    [ A.placeholder "Message..."
-    , A.value model.input
-    , E.onInput Input
-    , onEnter Send
+  H.div
+    [ A.class "ba b--light-gray" ]
+    [ Maybe.withDefault
+        (H.div
+          [ A.class "h4 pa2 overflow-container" ]
+          []
+        )
+        (Maybe.map postsView model.chat)
+    , H.div
+        [ A.class "w-100 bt b--light-gray" ]
+        [ H.input
+          [ A.class "w-100 pa2 bw0"
+          , A.type' "text"
+          , A.placeholder "Message..."
+          , A.value model.input
+          , E.onInput Input
+          , onEnter Send
+          ]
+          []
+        ]
     ]
-    []
-  ]
 
 disconnectedView : Model -> Html Msg
 disconnectedView model =
-  H.div []
+  H.div
+    [ A.class "w-50 center" ]
     [ H.input
-        [ A.placeholder "Name..."
+        [ A.class "w-100 pa2 tc"
+        , A.type' "text"
+        , A.placeholder "Name..."
         , A.value model.name
         , E.onInput InputName
         , onEnter Connect
@@ -237,9 +243,13 @@ view model =
         Connected -> connectedView model
         Disconnected -> disconnectedView model
   in
-    H.div []
-      [ H.h1 []
-          [ H.text "Elm Chat"
+    H.div
+      [ A.class "flex flex-column justify-center h-100 mw6 center" ]
+      [ H.div
+          [ A.class "flex flex-column h5 " ]
+          [ H.h1
+              [ A.class "f2 tc mb2" ]
+              [ H.text "l-o-l" ]
+          , subview
           ]
-      , subview
       ]

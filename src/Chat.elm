@@ -49,7 +49,7 @@ init =
   }
 
 maxPosts : Int
-maxPosts = 4
+maxPosts = 8
 
 
 

@@ -167,13 +167,15 @@ postView users (socket, post) =
   in
     H.div []
       [ H.span
-          [ A.class "db f6 b mt2 mb1 mid-gray" ]
+          [ A.class "db f6 b mt2 mb1 mid-gray"
+          , A.style [ ("word-break", "break-all") ] -- tachyons has a bug, no word-break for now
+          ]
           [ H.text name'
           , H.text ":"
           ]
       , H.span
           [ A.class "db pl2"
-          , A.style [ ("word-break", "break-all") ] -- tachyons doesn't have flex reverse
+          , A.style [ ("word-break", "break-all") ] -- tachyons has a bug, no word-break for now
           ]
           [ H.text post ]
       ]

@@ -1,7 +1,7 @@
 {
     "version": "1.0.0",
     "summary": "Full stack chat with Elm and Node.js",
-    "repository": "https://github.com/RGBboy/elm-chat.git",
+    "repository": "https://github.com/RGBboy/l-o-l.git",
     "license": "ISC",
     "source-directories": [
         "src"

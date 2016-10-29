@@ -1,11 +1,11 @@
 {
-  "name": "elm-chat",
+  "name": "l-o-l",
   "version": "1.0.0",
   "description": "Full stack chat with Elm and Node.js",
   "author": "RGBboy",
   "repository": {
     "type": "git",
-    "url": "https://github.com/RGBboy/elm-chat.git"
+    "url": "https://github.com/RGBboy/l-o-l.git"
   },
   "private": true,
   "main": "./lib/server",

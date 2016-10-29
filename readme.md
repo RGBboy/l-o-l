@@ -1,4 +1,4 @@
-# Elm Chat
+# l-o-l
 
 Full stack chat with Elm and Node.js
 

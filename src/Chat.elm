@@ -3,7 +3,7 @@ module Chat exposing
   , init
   , update
   , updateSocket
-  , Msg(Init, Connection, Disconnection, Post, OptimisticPost, Join)
+  , Msg(Init, Connection, Disconnection, Post, Join)
   , encodeMessage
   , decodeMessage
   )
@@ -26,7 +26,6 @@ type alias Model =
   { socket: Socket
   , connections: Set Socket
   , posts: List (Socket, String)
-  , optimisticPosts: List (Socket, String)
   , users: Dict Socket String
   }
 
@@ -35,7 +34,6 @@ createModel socket connections posts users =
   { socket = socket
   , connections = connections
   , posts = posts
-  , optimisticPosts = []
   , users = users
   }
 
@@ -44,7 +42,6 @@ init =
   { socket = ""
   , connections = Set.empty
   , posts = []
-  , optimisticPosts = []
   , users = Dict.empty
   }
 
@@ -60,7 +57,6 @@ type Msg
   | Connection Socket
   | Disconnection Socket
   | Post Socket String
-  | OptimisticPost Socket String
   | Join Socket String
   | Noop
 
@@ -93,12 +89,8 @@ update message model =
       let
         post = (socket, post')
       in
-        { model
-        | posts = List.take maxPosts <| post :: model.posts
-        , optimisticPosts = removeFirst ((==) post) model.optimisticPosts
+        { model | posts = List.take maxPosts <| post :: model.posts
         }
-    OptimisticPost socket post ->
-      { model | optimisticPosts = (socket, post) :: model.optimisticPosts }
     Join socket name ->
       { model | users = Dict.insert socket name model.users }
     _ -> model

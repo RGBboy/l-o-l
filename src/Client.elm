@@ -10,10 +10,9 @@ import Dict exposing (Dict)
 import Result exposing (Result)
 import Time exposing (Time)
 
-import Json.Decode as Decode exposing (Decoder, (:=))
-import Json.Encode as Encode
+import Json.Decode as Decode
 
-import Chat
+import ClientChat as Chat
 
 
 
@@ -34,8 +33,7 @@ type Status
   | Connected
 
 type alias Model =
-  { server: String
-  , chat: Maybe Chat.Model
+  { chat: Chat.Model
   , input: String
   , name: String
   , status: Status
@@ -44,8 +42,7 @@ type alias Model =
 
 init : String -> (Model, Cmd Msg)
 init server =
-  ( { server = server
-    , chat = Nothing
+  ( { chat = Chat.init server
     , input = ""
     , name = ""
     , status = Disconnected
@@ -59,7 +56,7 @@ init server =
 -- UPDATE
 
 type Msg
-  = Input String
+  = InputMessage String
   | Send
   | InputName String
   | Connect
@@ -71,48 +68,48 @@ type Msg
 update : Msg -> Model -> (Model, Cmd Msg)
 update message model =
   case message of
-    Input value ->
+    InputMessage value ->
       ( { model | input = value }
       , Cmd.none
       )
     Send ->
-      case model.chat of
-        Nothing -> (model, Cmd.none)
-        Just chat ->
-          ( { model
-            | input = ""
-            , chat = Just (Chat.update (Chat.OptimisticPost chat.socket model.input) chat)
-            }
-          ,  WebSocket.send model.server (encodeValue "Post" model.input)
-          )
+      let
+        (chat, cmd) = (Chat.update (Chat.ClientPost model.input) model.chat)
+      in
+        ( { model
+          | input = ""
+          , chat = chat
+          }
+        , cmd
+        )
     InputName value ->
       ( { model | name = value }
       , Cmd.none
       )
     Connect ->
-      ( { model
-          | name = ""
+      let
+        (chat, cmd) = (Chat.update (Chat.ClientJoin model.name) model.chat)
+      in
+        ( { model
+          | chat = chat
+          , name = ""
           , status = Connected
-        }
-      , WebSocket.send model.server (encodeValue "Join" model.name)
-      )
+          }
+        , cmd
+        )
     Disconnect ->
       ( { model
         | status = Disconnected
-        , chat = Nothing
         }
       , Cmd.none
       )
     Message message ->
-      case model.chat of
-        Nothing ->
-          ( { model | chat = Just (Chat.update message Chat.init) }
-          , Cmd.none
-          )
-        Just chat ->
-          ( { model | chat = Just (Chat.update message chat) }
-          , Cmd.none
-          )
+      let
+        (chat, cmd) = Chat.update message model.chat
+      in
+        ( { model | chat = chat }
+        , cmd
+        )
     Tick time ->
       ( { model | time = time }
       , Cmd.none
@@ -123,19 +120,11 @@ update message model =
 
 -- SUBSCRIPTIONS
 
-encodeValue : String -> String -> String
-encodeValue kind value =
-  Encode.object
-    [ ("type", Encode.string kind)
-    , ("value", Encode.string value)
-    ]
-  |> Encode.encode 2
-
 subscriptions : Model -> Sub Msg
 subscriptions model =
   if model.status == Connected then
     Sub.batch
-      [ Sub.map Message (WebSocket.listen model.server Chat.decodeMessage)
+      [ Sub.map Message (Chat.listen model.chat)
       , Time.every (100 * Time.millisecond) Tick
       ]
   else
@@ -158,7 +147,11 @@ connectionView names socket =
 
 connectionsView : Chat.Model -> Html Msg
 connectionsView chat =
-    H.div [] (List.map (connectionView chat.users) (Set.toList chat.connections))
+  let
+    users = Chat.users chat
+    connections = Chat.connections chat
+  in
+    H.div [] (List.map (connectionView users) (Set.toList connections))
 
 postView : Dict Socket String -> (Socket, String) -> Html Msg
 postView users (socket, post) =
@@ -183,13 +176,14 @@ postView users (socket, post) =
 postsView : Chat.Model -> Html Msg
 postsView chat =
   let
-    posts = List.append chat.optimisticPosts chat.posts
+    posts = Chat.posts chat
+    users = Chat.users chat
   in
     H.div
       [ A.class "flex h4 pa2 overflow-container"
       , A.style [ ("flex-direction", "column-reverse") ] -- tachyons doesn't have flex reverse
       ]
-      (List.map (postView chat.users) posts)
+      (List.map (postView users) posts)
 
 onEnter : Msg -> H.Attribute Msg
 onEnter message =
@@ -203,22 +197,17 @@ is13 : Int -> Result String ()
 is13 code =
   if code == 13 then Ok () else Err "not the right key code"
 
-maybeToList : Maybe a -> List a
-maybeToList maybe =
-  case maybe of
-    Just a -> [a]
-    Nothing -> []
+-- maybeToList : Maybe a -> List a
+-- maybeToList maybe =
+--   case maybe of
+--     Just a -> [a]
+--     Nothing -> []
 
 connectedView : Model -> Html Msg
 connectedView model =
   H.div
     [ A.class "ba b--light-gray" ]
-    [ Maybe.withDefault
-        (H.div
-          [ A.class "h4 pa2 overflow-container" ]
-          []
-        )
-        (Maybe.map postsView model.chat)
+    [ postsView model.chat
     , H.div
         [ A.class "w-100 bt b--light-gray" ]
         [ H.input
@@ -226,7 +215,7 @@ connectedView model =
           , A.type' "text"
           , A.placeholder "Message..."
           , A.value model.input
-          , E.onInput Input
+          , E.onInput InputMessage
           , onEnter Send
           ]
           []

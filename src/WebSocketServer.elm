@@ -1,13 +1,11 @@
 module WebSocketServer exposing
   ( Socket
-  , Event
+  , Config
   , close
   , sendToOne
   , sendToMany
   , sendToOthers
-  , Update
-  , update
-  , decodeEvent
+  , eventDecoder
   )
 
 import Set exposing (Set)
@@ -18,25 +16,11 @@ import Json.Encode as Encode
 
 type alias Socket = String
 
-type Event a
-  = Connection Socket
-  | Disconnection Socket
-  | Message Socket a
-  | Error
-
-type alias Update a b msg =
-  { onConnection : Socket -> a -> (a, Cmd msg)
-  , onDisconnection: Socket -> a -> (a, Cmd msg)
-  , onMessage : Socket -> b -> a -> (a, Cmd msg)
+type alias Config msg =
+  { onConnection : Socket -> msg
+  , onDisconnection: Socket -> msg
+  , onMessage : Socket -> Decode.Value -> msg
   }
-
-update : Update a b msg -> Event b -> a -> (a, Cmd msg)
-update config message model =
-  case message of
-    Connection socket -> config.onConnection socket model
-    Disconnection socket -> config.onDisconnection socket model
-    Message socket message -> config.onMessage socket message model
-    Error -> (model, Cmd.none)
 
 -- COMMANDS
 
@@ -76,26 +60,22 @@ encodeMessage socket message =
 
 -- DECODER
 
-decodeEvent : Decoder a -> Decode.Value -> Event a
-decodeEvent decodeMessage value =
-  Result.withDefault Error (Decode.decodeValue (msgDecoder decodeMessage) value)
-
-msgDecoder : Decoder a -> Decoder (Event a)
-msgDecoder decodeMessage =
+eventDecoder : Config msg -> Decoder msg
+eventDecoder config =
   Decode.field "type" Decode.string
-    |> Decode.andThen (msgTypeDecoder decodeMessage)
+    |> Decode.andThen (msgTypeDecoder config)
 
-msgTypeDecoder : Decoder a -> String -> Decoder (Event a)
-msgTypeDecoder decodeMessage kind =
+msgTypeDecoder : Config msg -> String -> Decoder msg
+msgTypeDecoder config kind =
   case kind of
     "Connection" ->
-      decode Connection
+      decode config.onConnection
         |> required "id" Decode.string
     "Disconnection" ->
-      decode Disconnection
+      decode config.onDisconnection
         |> required "id" Decode.string
     "Message" ->
-      decode Message
+      decode config.onMessage
         |> required "id" Decode.string
-        |> required "message" decodeMessage
+        |> required "message" Decode.value
     _ -> Decode.fail "Could not decode Msg"

@@ -14,7 +14,7 @@ import Chat
 
 
 
-main : Program Never Model (WSS.Event ClientInput)
+main : Program Never Model Msg
 main =
   Platform.program
     { init = init
@@ -39,9 +39,12 @@ port outputWSS : Encode.Value -> Cmd msg
 
 type alias Model = Chat.Model
 
-type ClientInput
-  = ClientPost String
-  | ClientJoin String
+type Msg
+  = Connection Socket
+  | Disconnection Socket
+  | Post Socket String
+  | Join Socket String
+  | Noop
 
 init : (Model, Cmd msg)
 init =
@@ -51,73 +54,74 @@ init =
 
 -- UPDATE
 
-updateConfig : WSS.Update Model ClientInput msg
-updateConfig =
-  { onConnection = onConnection
-  , onDisconnection = onDisconnection
-  , onMessage = onMessage
+decodeConfig : WSS.Config Msg
+decodeConfig =
+  { onConnection = Connection
+  , onDisconnection = Disconnection
+  , onMessage = decodeClientMessage
   }
 
-update : WSS.Event ClientInput -> Model -> (Model, Cmd msg)
-update = WSS.update updateConfig
-
-onConnection : Socket -> Model -> (Model, Cmd msg)
-onConnection socket model =
-  if (Set.size model.connections) <= maxConnections then
-    let
-      newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket) model)
-    in
-      ( newModel
-      , Cmd.batch
-        [ sendToOne outputWSS (Chat.encodeMessage (Chat.Init newModel)) socket
-        , sendToMany outputWSS (Chat.encodeMessage (Chat.Connection socket)) (Set.toList model.connections)
-        ]
-      )
-  else
-    (model, WSS.close outputWSS socket)
-
-onDisconnection : Socket -> Model -> (Model, Cmd msg)
-onDisconnection socket model =
-  -- Handle if we closed the connection immediately
-  if (Set.member socket model.connections) then
-    ( Chat.update (Chat.Disconnection socket) model
-    , sendToMany outputWSS (Chat.encodeMessage (Chat.Disconnection socket)) (Set.toList model.connections)
-    )
-  else
-    (model, Cmd.none)
-
-onMessage : Socket -> ClientInput -> Model -> (Model, Cmd msg)
-onMessage socket message model =
+update : Msg -> Model -> (Model, Cmd msg)
+update message model =
   case message of
-    ClientPost post ->
+    Connection socket ->
+      if (Set.size model.connections) <= maxConnections then
+        let
+          newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket) model)
+        in
+          ( newModel
+          , Cmd.batch
+            [ sendToOne outputWSS (Chat.encodeMessage (Chat.Init newModel)) socket
+            , sendToMany outputWSS (Chat.encodeMessage (Chat.Connection socket)) (Set.toList model.connections)
+            ]
+          )
+      else
+        (model, WSS.close outputWSS socket)
+    Disconnection socket ->
+      -- Handle if we closed the connection immediately
+      if (Set.member socket model.connections) then
+        ( Chat.update (Chat.Disconnection socket) model
+        , sendToMany outputWSS (Chat.encodeMessage (Chat.Disconnection socket)) (Set.toList model.connections)
+        )
+      else
+        (model, Cmd.none)
+    Post socket post ->
       ( Chat.update (Chat.Post socket post) model
       , sendToMany outputWSS (Chat.encodeMessage (Chat.Post socket post)) (Set.toList model.connections)
       )
-    ClientJoin name ->
+    Join socket name ->
       ( Chat.update (Chat.Join socket name) model
       , sendToMany outputWSS (Chat.encodeMessage (Chat.Join socket name)) (Set.toList model.connections)
       )
+    Noop -> (model, Cmd.none)
 
 
 
 -- SUBSCRIPTIONS
 
-subscriptions : Model -> Sub (WSS.Event ClientInput)
-subscriptions model = inputWSS (WSS.decodeEvent decodeClientInput)
+decodeMsg : Decode.Value -> Msg
+decodeMsg value =
+  Result.withDefault Noop (Decode.decodeValue (WSS.eventDecoder decodeConfig) value)
 
-decodeClientInput : Decoder ClientInput
-decodeClientInput =
-  Decode.field "type" Decode.string |> Decode.andThen decodeClientInputType
+subscriptions : Model -> Sub Msg
+subscriptions model = inputWSS decodeMsg
 
+decodeClientMessage : Socket -> Decode.Value -> Msg
+decodeClientMessage socket value =
+  Result.withDefault Noop (Decode.decodeValue (decodeClientInput socket) value)
 
-decodeClientInputType : String -> Decoder ClientInput
-decodeClientInputType kind =
+decodeClientInput : Socket -> Decoder Msg
+decodeClientInput socket =
+  Decode.field "type" Decode.string |> Decode.andThen (decodeClientInputType socket)
+
+decodeClientInputType : String -> String -> Decoder Msg
+decodeClientInputType socket kind =
   case kind of
     "Post" ->
-      decode ClientPost
+      decode (Post socket)
         |> required "value" Decode.string
 
     "Join" ->
-      decode ClientJoin
+      decode (Join socket)
         |> required "value" Decode.string
     _ -> Decode.fail "Could not decode Msg"

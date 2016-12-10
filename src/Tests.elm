@@ -1,27 +1,16 @@
-port module Tests exposing (..)
+port module Tests exposing (main)
 
-import Test exposing (..)
+import Test exposing (Test)
 import Test.Runner.Node exposing (run, TestProgram)
 import Json.Encode exposing (Value)
-import Expect
-import String
+
+import ChatTest
 
 
 all : Test
 all =
-  describe "Chat"
-    [ describe "Unit test examples"
-      [ test "Addition" <|
-        \() ->
-          Expect.equal (3 + 7) 10
-      , test "String.left" <|
-        \() ->
-          Expect.equal "a" (String.left 1 "abcdefg")
-      , test "This test should fail - you should remove it" <|
-        \() ->
-          Expect.fail "Failed as expected!"
-      ]
-    ]
+  ChatTest.tests
+
 
 main : TestProgram
 main =

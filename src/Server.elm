@@ -1,13 +1,12 @@
 port module Server exposing (..)
 
-import Html exposing (..)
-import Html.App as App
+import Platform exposing (Program)
 
 import WebSocketServer as WSS exposing (Socket, sendToOne, sendToMany)
 
 import Set exposing (Set)
 
-import Json.Decode as Decode exposing (Decoder, (:=))
+import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
@@ -15,12 +14,11 @@ import Chat
 
 
 
-main : Program Never
+main : Program Never Model (WSS.Event ClientInput)
 main =
-  App.program
+  Platform.program
     { init = init
     , update = update
-    , view = always (Html.text "") -- hack for server program to work
     , subscriptions = subscriptions
     }
 
@@ -67,7 +65,7 @@ onConnection : Socket -> Model -> (Model, Cmd msg)
 onConnection socket model =
   if (Set.size model.connections) <= maxConnections then
     let
-      newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket) model) 
+      newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket) model)
     in
       ( newModel
       , Cmd.batch
@@ -109,18 +107,17 @@ subscriptions model = inputWSS (WSS.decodeEvent decodeClientInput)
 
 decodeClientInput : Decoder ClientInput
 decodeClientInput =
-  Decode.customDecoder
-    (("type" := Decode.string) `Decode.andThen` decodeClientInputType)
-    (Result.fromMaybe "Could not decode message body")
+  Decode.field "type" Decode.string |> Decode.andThen decodeClientInputType
 
-decodeClientInputType : String -> Decoder (Maybe ClientInput)
+
+decodeClientInputType : String -> Decoder ClientInput
 decodeClientInputType kind =
   case kind of
     "Post" ->
-      decode (Just << ClientPost)
+      decode ClientPost
         |> required "value" Decode.string
 
     "Join" ->
-      decode (Just << ClientJoin)
+      decode ClientJoin
         |> required "value" Decode.string
-    _ -> decode Nothing
+    _ -> Decode.fail "Could not decode Msg"

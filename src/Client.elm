@@ -1,5 +1,4 @@
 import Html as H exposing (Html)
-import Html.App as Html
 import Html.Attributes as A
 import Html.Events as E
 import WebSocket
@@ -10,14 +9,15 @@ import Dict exposing (Dict)
 import Result exposing (Result)
 import Time exposing (Time)
 
-import Json.Decode as Decode
+import Json.Decode as Decode exposing (Decoder)
 
 import ClientChat as Chat
 
 
 
+main : Program String Model Msg
 main =
-  Html.programWithFlags
+  H.programWithFlags
     { init = init
     , view = view
     , update = update
@@ -137,11 +137,11 @@ subscriptions model =
 connectionView : Dict Socket String -> Socket -> Html Msg
 connectionView names socket =
   let
-    name' = Maybe.withDefault "Unknown" (Dict.get socket names)
+    name = Maybe.withDefault "Unknown" (Dict.get socket names)
   in
     H.div []
       [ H.span []
-          [ H.text (name')
+          [ H.text name
           ]
       ]
 
@@ -156,14 +156,14 @@ connectionsView chat =
 postView : Dict Socket String -> (Socket, String) -> Html Msg
 postView users (socket, post) =
   let
-    name' = Maybe.withDefault "Unknown" (Dict.get socket users)
+    name = Maybe.withDefault "Unknown" (Dict.get socket users)
   in
     H.div []
       [ H.span
           [ A.class "db f6 b mt2 mb1 mid-gray"
           , A.style [ ("word-break", "break-all") ] -- tachyons has a bug, no word-break for now
           ]
-          [ H.text name'
+          [ H.text name
           , H.text ":"
           ]
       , H.span
@@ -188,20 +188,11 @@ postsView chat =
 onEnter : Msg -> H.Attribute Msg
 onEnter message =
     E.on "keydown"
-      (Decode.map
-        (always message)
-        (Decode.customDecoder E.keyCode is13)
-      )
+      (E.keyCode |> Decode.andThen (is13 message))
 
-is13 : Int -> Result String ()
-is13 code =
-  if code == 13 then Ok () else Err "not the right key code"
-
--- maybeToList : Maybe a -> List a
--- maybeToList maybe =
---   case maybe of
---     Just a -> [a]
---     Nothing -> []
+is13 : a -> Int -> Decoder a
+is13 a code =
+  if code == 13 then Decode.succeed a else Decode.fail "not the right key code"
 
 connectedView : Model -> Html Msg
 connectedView model =
@@ -212,7 +203,7 @@ connectedView model =
         [ A.class "w-100 bt b--light-gray" ]
         [ H.input
           [ A.class "w-100 pa2 bw0"
-          , A.type' "text"
+          , A.type_ "text"
           , A.placeholder "Message..."
           , A.value model.input
           , E.onInput InputMessage
@@ -228,7 +219,7 @@ disconnectedView model =
     [ A.class "w-50 center" ]
     [ H.input
         [ A.class "w-100 pa2 tc"
-        , A.type' "text"
+        , A.type_ "text"
         , A.placeholder "Name..."
         , A.value model.name
         , E.onInput InputName

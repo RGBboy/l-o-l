@@ -12,7 +12,7 @@ module WebSocketServer exposing
 
 import Set exposing (Set)
 
-import Json.Decode as Decode exposing (Decoder, (:=))
+import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
@@ -82,7 +82,8 @@ decodeEvent decodeMessage value =
 
 msgDecoder : Decoder a -> Decoder (Event a)
 msgDecoder decodeMessage =
-  ("type" := Decode.string) `Decode.andThen` (msgTypeDecoder decodeMessage)
+  Decode.field "type" Decode.string
+    |> Decode.andThen (msgTypeDecoder decodeMessage)
 
 msgTypeDecoder : Decoder a -> String -> Decoder (Event a)
 msgTypeDecoder decodeMessage kind =
@@ -97,4 +98,4 @@ msgTypeDecoder decodeMessage kind =
       decode Message
         |> required "id" Decode.string
         |> required "message" decodeMessage
-    _ -> decode Error
+    _ -> Decode.fail "Could not decode Msg"

@@ -16,8 +16,7 @@ import List.Extra as ListExtra
 import Set exposing (Set)
 import Dict exposing (Dict)
 
-import Json.Decode as Decode exposing (Decoder, (:=))
-import Json.Decode.Pipeline exposing (custom, decode, required)
+import Json.Decode as Decode
 import Json.Encode as Encode
 
 import Chat

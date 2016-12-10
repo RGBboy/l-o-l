@@ -14,7 +14,7 @@ import List.Extra as ListExtra
 import Set exposing (Set)
 import Dict exposing (Dict)
 
-import Json.Decode as Decode exposing (Decoder, (:=))
+import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (custom, decode, required)
 import Json.Encode as Encode
 
@@ -85,15 +85,11 @@ update message model =
         | connections = connections
         , users = calcUsers model.posts connections model.users
         }
-    Post socket post' ->
-      let
-        post = (socket, post')
-      in
-        { model | posts = List.take maxPosts <| post :: model.posts
-        }
+    Post socket post ->
+      { model | posts = List.take maxPosts <| (socket, post) :: model.posts }
     Join socket name ->
       { model | users = Dict.insert socket name model.users }
-    _ -> model
+    Noop -> model
 
 updateSocket : Socket -> Model -> Model
 updateSocket socket model =
@@ -168,37 +164,33 @@ decodeMessage value =
 
 decodeMsg : Decoder Msg
 decodeMsg =
-  Decode.customDecoder
-    (("type" := Decode.string) `Decode.andThen` decodeMsgType)
-    (Result.fromMaybe "Could not decode msg")
+  Decode.field "type" Decode.string |> Decode.andThen decodeMsgType
 
-decodeMsgType : String -> Decoder (Maybe Msg)
+decodeMsgType : String -> Decoder Msg
 decodeMsgType kind =
   case kind of
     "Init" ->
-      decode (Just << Init)
+      decode Init
         |> custom (decode createModel
           |> required "socket" Decode.string
           |> required "connections" (decode Set.fromList |> custom (Decode.list Decode.string))
           |> required "posts" (Decode.list decodeInitPost)
           |> required "users" (Decode.dict Decode.string))
     "Connection" ->
-      decode (Just << Connection)
+      decode Connection
         |> required "id" Decode.string
     "Disconnection" ->
-      decode (Just << Disconnection)
+      decode Disconnection
         |> required "id" Decode.string
     "Join" ->
-      decode Just
-        |> custom (decode Join
-          |> required "id" Decode.string
-          |> required "value" Decode.string)
+      decode Join
+        |> required "id" Decode.string
+        |> required "value" Decode.string
     "Post" ->
-      decode Just
-        |> custom (decode Post
-          |> required "id" Decode.string
-          |> required "value" Decode.string)
-    _ -> decode Nothing
+      decode Post
+        |> required "id" Decode.string
+        |> required "value" Decode.string
+    _ -> Decode.fail "Could not decode Msg"
 
 decodeInitPost : Decoder (Socket, String)
 decodeInitPost =

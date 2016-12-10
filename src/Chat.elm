@@ -174,7 +174,7 @@ decodeMsgType kind =
         |> custom (decode createModel
           |> required "socket" Decode.string
           |> required "connections" (decode Set.fromList |> custom (Decode.list Decode.string))
-          |> required "posts" (Decode.list decodeInitPost)
+          |> required "posts" (Decode.list decodePost)
           |> required "users" (Decode.dict Decode.string))
     "Connection" ->
       decode Connection
@@ -192,8 +192,8 @@ decodeMsgType kind =
         |> required "value" Decode.string
     _ -> Decode.fail "Could not decode Msg"
 
-decodeInitPost : Decoder (Socket, String)
-decodeInitPost =
+decodePost : Decoder (Socket, String)
+decodePost =
   decode (,)
     |> required "id" Decode.string
     |> required "post" Decode.string

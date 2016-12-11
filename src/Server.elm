@@ -68,12 +68,13 @@ update message model =
       if (Set.size model.connections) <= maxConnections then
         let
           newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket) model)
+          commands =
+            Cmd.batch <|
+              (sendToOne outputWSS (Chat.encodeMessage (Chat.Init newModel)) socket)
+              :: (sendToMany outputWSS (Chat.encodeMessage (Chat.Connection socket)) (Set.toList model.connections))
         in
           ( newModel
-          , Cmd.batch
-            [ sendToOne outputWSS (Chat.encodeMessage (Chat.Init newModel)) socket
-            , sendToMany outputWSS (Chat.encodeMessage (Chat.Connection socket)) (Set.toList model.connections)
-            ]
+          , commands
           )
       else
         (model, WSS.close outputWSS socket)
@@ -81,17 +82,20 @@ update message model =
       -- Handle if we closed the connection immediately
       if (Set.member socket model.connections) then
         ( Chat.update (Chat.Disconnection socket) model
-        , sendToMany outputWSS (Chat.encodeMessage (Chat.Disconnection socket)) (Set.toList model.connections)
+        , Cmd.batch <|
+            sendToMany outputWSS (Chat.encodeMessage (Chat.Disconnection socket)) (Set.toList model.connections)
         )
       else
         (model, Cmd.none)
     Post socket post ->
       ( Chat.update (Chat.Post socket post) model
-      , sendToMany outputWSS (Chat.encodeMessage (Chat.Post socket post)) (Set.toList model.connections)
+      , Cmd.batch <|
+          sendToMany outputWSS (Chat.encodeMessage (Chat.Post socket post)) (Set.toList model.connections)
       )
     Join socket name ->
       ( Chat.update (Chat.Join socket name) model
-      , sendToMany outputWSS (Chat.encodeMessage (Chat.Join socket name)) (Set.toList model.connections)
+      , Cmd.batch <|
+          sendToMany outputWSS (Chat.encodeMessage (Chat.Join socket name)) (Set.toList model.connections)
       )
     Noop -> (model, Cmd.none)
 

@@ -4,6 +4,8 @@ import Test exposing (Test, describe, test)
 import Expect
 import String
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
+
 
 import WebSocketServer exposing (..)
 
@@ -71,5 +73,17 @@ tests =
         \() ->
           expectDecode (eventDecoder config) messageJSON
             (Expect.equal (Message "abc" "Test"))
+      ]
+    , describe ".close"
+      [ test "close" <|
+        \() ->
+          let
+            actual = Encode.encode 2 (close identity "abc")
+            expected = """{
+  "type": "Close",
+  "id": "abc"
+}"""
+          in
+            Expect.equal expected actual
       ]
     ]

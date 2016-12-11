@@ -4,12 +4,12 @@ import Test exposing (Test)
 import Test.Runner.Node exposing (run, TestProgram)
 import Json.Encode exposing (Value)
 
-import ChatTest
+import WebSocketServerTest
 
 
 all : Test
 all =
-  ChatTest.tests
+  WebSocketServerTest.tests
 
 
 main : TestProgram

@@ -24,12 +24,10 @@ type alias Config msg =
 -- COMMANDS
 
 close : (Encode.Value -> Cmd msg) -> Socket -> Cmd msg
-close outputPort socket =
-  outputPort (encodeClose socket)
+close outputPort = encodeClose >> outputPort
 
 sendToOne : (Encode.Value -> Cmd msg) -> Encode.Value -> Socket -> Cmd msg
-sendToOne outputPort message socket =
-  outputPort (encodeMessage socket message)
+sendToOne outputPort = curry (encodeMessage >> outputPort)
 
 sendToMany : (Encode.Value -> Cmd msg) -> Encode.Value -> List Socket -> Cmd msg
 sendToMany outputPort message sockets =
@@ -49,8 +47,8 @@ encodeClose socket =
     , ("id", Encode.string socket)
     ]
 
-encodeMessage : Socket -> Encode.Value -> Encode.Value
-encodeMessage socket message =
+encodeMessage : (Encode.Value, Socket) -> Encode.Value
+encodeMessage (message, socket) =
   Encode.object
     [ ("type", Encode.string "Message")
     , ("id", Encode.string socket)

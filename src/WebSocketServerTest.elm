@@ -64,39 +64,79 @@ tests =
       [ test "decodes Connection events" <|
         \() ->
           expectDecode (eventDecoder config) connectionJSON
-            (Expect.equal (Connection "abc"))
+            (flip Expect.equal (Connection "abc"))
       , test "decodes Disconnection events" <|
         \() ->
           expectDecode (eventDecoder config) disconnectionJSON
-            (Expect.equal (Disconnection "abc"))
+            (flip Expect.equal (Disconnection "abc"))
       , test "decodes Message events" <|
         \() ->
           expectDecode (eventDecoder config) messageJSON
-            (Expect.equal (Message "abc" "Test"))
+            (flip Expect.equal (Message "abc" "Test"))
       ]
     , describe ".close"
       [ test "close" <|
         \() ->
           let
-            actual = Encode.encode 2 (close identity "abc")
+            actual = Encode.encode 2 (close identity "a")
             expected = """{
   "type": "Close",
-  "id": "abc"
+  "id": "a"
 }"""
           in
-            Expect.equal expected actual
+            Expect.equal actual expected
       ]
     , describe ".sendToOne"
       [ test "sendToOne" <|
         \() ->
           let
-            actual = Encode.encode 2 (sendToOne identity (Encode.string "Test") "abc")
+            actual = Encode.encode 2 (sendToOne identity (Encode.string "Test") "a")
             expected = """{
   "type": "Message",
-  "id": "abc",
+  "id": "a",
   "data": "Test"
 }"""
           in
-            Expect.equal expected actual
+            Expect.equal actual expected
+      ]
+    , describe ".sendToMany"
+      [ test "sendToMany" <|
+        \() ->
+          let
+            actual = List.map (Encode.encode 2) (sendToMany identity (Encode.string "Test") ["a", "b"])
+            expected =
+              ["""{
+  "type": "Message",
+  "id": "a",
+  "data": "Test"
+}"""
+              , """{
+  "type": "Message",
+  "id": "b",
+  "data": "Test"
+}"""
+              ]
+          in
+            Expect.equalLists actual expected
+      ]
+    , describe ".sendToOthers"
+      [ test "sendToOthers" <|
+        \() ->
+          let
+            actual = List.map (Encode.encode 2) (sendToOthers identity (Encode.string "Test") "a" ["a", "b", "c"])
+            expected =
+              ["""{
+  "type": "Message",
+  "id": "b",
+  "data": "Test"
+}"""
+              , """{
+  "type": "Message",
+  "id": "c",
+  "data": "Test"
+}"""
+              ]
+          in
+            Expect.equalLists actual expected
       ]
     ]

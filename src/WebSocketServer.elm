@@ -38,7 +38,7 @@ sendToMany outputPort message sockets =
 sendToOthers : (Encode.Value -> a) -> Encode.Value -> Socket -> List Socket -> List a
 sendToOthers outputPort message socket sockets =
   let
-    others = List.filter ((==) socket) sockets
+    others = List.filter ((/=) socket) sockets
   in
     sendToMany outputPort message others
 

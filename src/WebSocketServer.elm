@@ -8,10 +8,10 @@ module WebSocketServer exposing
   , eventDecoder
   )
 
-import Set exposing (Set)
-
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+
+
 
 type alias Socket = String
 
@@ -20,6 +20,8 @@ type alias Config msg =
   , onDisconnection: Socket -> msg
   , onMessage: Socket -> Decoder msg
   }
+
+
 
 -- COMMANDS
 
@@ -40,6 +42,10 @@ sendToOthers outputPort message socket sockets =
   in
     sendToMany outputPort message others
 
+
+
+-- ENCODE
+
 encodeClose : Socket -> Encode.Value
 encodeClose socket =
   Encode.object
@@ -55,7 +61,9 @@ encodeMessage (message, socket) =
     , ("data", message)
     ]
 
--- DECODER
+
+
+-- DECODE
 
 eventDecoder : Config msg -> Decoder msg
 eventDecoder config =
@@ -74,4 +82,4 @@ msgTypeDecoder config kind =
     "Message" ->
       Decode.field "id" Decode.string
         |> Decode.andThen (config.onMessage >> Decode.field "message")
-    _ -> Decode.fail "Could not decode Msg"
+    _ -> Decode.fail ("Could not decode msg of type " ++ kind)

@@ -11,7 +11,6 @@ module WebSocketServer exposing
 import Set exposing (Set)
 
 import Json.Decode as Decode exposing (Decoder)
-import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
 type alias Socket = String
@@ -19,7 +18,7 @@ type alias Socket = String
 type alias Config msg =
   { onConnection : Socket -> msg
   , onDisconnection: Socket -> msg
-  , onMessage : Socket -> Decode.Value -> msg
+  , onMessage: String -> Decoder msg
   }
 
 -- COMMANDS
@@ -69,13 +68,12 @@ msgTypeDecoder : Config msg -> String -> Decoder msg
 msgTypeDecoder config kind =
   case kind of
     "Connection" ->
-      decode config.onConnection
-        |> required "id" Decode.string
+      Decode.field "id" Decode.string
+        |> Decode.map config.onConnection
     "Disconnection" ->
-      decode config.onDisconnection
-        |> required "id" Decode.string
+      Decode.field "id" Decode.string
+        |> Decode.map config.onDisconnection
     "Message" ->
-      decode config.onMessage
-        |> required "id" Decode.string
-        |> required "message" Decode.value
+      Decode.field "id" Decode.string
+        |> Decode.andThen (config.onMessage >> Decode.field "message")
     _ -> Decode.fail "Could not decode Msg"

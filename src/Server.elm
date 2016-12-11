@@ -106,16 +106,12 @@ decodeMsg value =
 subscriptions : Model -> Sub Msg
 subscriptions model = inputWSS decodeMsg
 
-decodeClientMessage : Socket -> Decode.Value -> Msg
-decodeClientMessage socket value =
-  Result.withDefault Noop (Decode.decodeValue (decodeClientInput socket) value)
+decodeClientMessage : Socket -> Decoder Msg
+decodeClientMessage socket =
+  Decode.field "type" Decode.string |> Decode.andThen (decodeClientMessageType socket)
 
-decodeClientInput : Socket -> Decoder Msg
-decodeClientInput socket =
-  Decode.field "type" Decode.string |> Decode.andThen (decodeClientInputType socket)
-
-decodeClientInputType : String -> String -> Decoder Msg
-decodeClientInputType socket kind =
+decodeClientMessageType : String -> String -> Decoder Msg
+decodeClientMessageType socket kind =
   case kind of
     "Post" ->
       decode (Post socket)

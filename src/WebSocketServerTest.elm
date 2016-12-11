@@ -86,4 +86,17 @@ tests =
           in
             Expect.equal expected actual
       ]
+    , describe ".sendToOne"
+      [ test "sendToOne" <|
+        \() ->
+          let
+            actual = Encode.encode 2 (sendToOne identity (Encode.string "Test") "abc")
+            expected = """{
+  "type": "Message",
+  "id": "abc",
+  "data": "Test"
+}"""
+          in
+            Expect.equal expected actual
+      ]
     ]

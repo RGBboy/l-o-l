@@ -18,7 +18,7 @@ type alias Socket = String
 type alias Config msg =
   { onConnection : Socket -> msg
   , onDisconnection: Socket -> msg
-  , onMessage: String -> Decoder msg
+  , onMessage: Socket -> Decoder msg
   }
 
 -- COMMANDS

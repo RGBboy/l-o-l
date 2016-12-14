@@ -1,15 +1,20 @@
 port module Tests exposing (main)
 
-import Test exposing (Test)
+import Test exposing (Test, describe)
 import Test.Runner.Node exposing (run, TestProgram)
 import Json.Encode exposing (Value)
 
 import WebSocketServerTest
+import ClientChatTest
+
 
 
 all : Test
 all =
-  WebSocketServerTest.tests
+  describe "l-o-l"
+    [ WebSocketServerTest.tests
+    , ClientChatTest.tests
+    ]
 
 
 main : TestProgram

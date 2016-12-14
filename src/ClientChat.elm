@@ -7,6 +7,7 @@ module ClientChat exposing
   , posts
   , users
   , listen
+  , encodeValue
   )
 
 import WebSocket

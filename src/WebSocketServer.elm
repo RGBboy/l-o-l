@@ -9,14 +9,15 @@ module WebSocketServer exposing
   )
 
 import Json.Decode as Decode exposing (Decoder)
+import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
-
+import Navigation exposing (Location)
 
 type alias Socket = String
 
 type alias Config msg =
-  { onConnection : Socket -> msg
+  { onConnection : Socket -> Location -> msg
   , onDisconnection: Socket -> msg
   , onMessage: Socket -> Decoder msg
   }
@@ -74,12 +75,28 @@ msgTypeDecoder : Config msg -> String -> Decoder msg
 msgTypeDecoder config kind =
   case kind of
     "Connection" ->
-      Decode.field "id" Decode.string
-        |> Decode.map config.onConnection
+      decode config.onConnection
+        |> required "id" Decode.string
+        |> required "location" decodeLocation
     "Disconnection" ->
-      Decode.field "id" Decode.string
-        |> Decode.map config.onDisconnection
+      decode config.onDisconnection
+        |> required "id" Decode.string
     "Message" ->
       Decode.field "id" Decode.string
-        |> Decode.andThen (config.onMessage >> Decode.field "message")
+       |> Decode.andThen (config.onMessage >> Decode.field "message")
     _ -> Decode.fail ("Could not decode msg of type " ++ kind)
+
+decodeLocation : Decoder Location
+decodeLocation =
+  decode Location
+    |> required "protocol" Decode.string
+    |> required "hash" Decode.string
+    |> required "search" Decode.string
+    |> required "pathname" Decode.string
+    |> required "port_" Decode.string
+    |> required "hostname" Decode.string
+    |> required "host" Decode.string
+    |> required "origin" Decode.string
+    |> required "href" Decode.string
+    |> required "username" Decode.string
+    |> required "password" Decode.string

@@ -6,6 +6,7 @@ module Chat exposing
   , Msg(Init, Connection, Disconnection, Post, Join)
   , encodeMessage
   , decodeMessage
+  , decodeLocation
   )
 
 import WebSocketServer as WSS exposing (Socket)
@@ -18,7 +19,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (custom, decode, required)
 import Json.Encode as Encode
 
-
+import Navigation exposing (Location)
 
 -- MODEL
 
@@ -54,7 +55,7 @@ maxPosts = 8
 
 type Msg
   = Init Model
-  | Connection Socket
+  | Connection Socket Location
   | Disconnection Socket
   | Post Socket String
   | Join Socket String
@@ -72,7 +73,7 @@ update : Msg -> Model -> Model
 update message model =
   case message of
     Init init -> init
-    Connection socket ->
+    Connection socket location ->
       { model
       | connections = Set.insert socket model.connections
       , users = Dict.insert socket "" model.users
@@ -123,10 +124,11 @@ encodeMessage msg =
         , ("posts", Encode.list (List.map encodeInitPost model.posts) )
         , ("users", Encode.object (Dict.toList (Dict.map (always Encode.string) model.users)) )
         ]
-    Connection socket ->
+    Connection socket location ->
       Encode.object
         [ ("type", Encode.string "Connection")
         , ("id", Encode.string socket)
+        , ("location", encodeLocation location) -- Remove this as it should not be sent to the client
         ]
     Disconnection socket ->
       Encode.object
@@ -154,7 +156,21 @@ encodeInitPost (socket, post) =
     , ("post", Encode.string post)
     ]
 
-
+encodeLocation : Location -> Encode.Value
+encodeLocation location =
+  Encode.object
+    [ ("protocol", Encode.string location.protocol)
+    , ("hash", Encode.string location.hash)
+    , ("search", Encode.string location.search)
+    , ("pathname", Encode.string location.pathname)
+    , ("port_", Encode.string location.port_)
+    , ("hostname", Encode.string location.hostname)
+    , ("host", Encode.string location.host)
+    , ("origin", Encode.string location.origin)
+    , ("href", Encode.string location.href)
+    , ("username", Encode.string location.username)
+    , ("password", Encode.string location.password)
+    ]
 
 -- DECODE
 
@@ -179,6 +195,7 @@ decodeMsgType kind =
     "Connection" ->
       decode Connection
         |> required "id" Decode.string
+        |> required "location" decodeLocation
     "Disconnection" ->
       decode Disconnection
         |> required "id" Decode.string
@@ -191,6 +208,21 @@ decodeMsgType kind =
         |> required "id" Decode.string
         |> required "value" Decode.string
     _ -> Decode.fail "Could not decode Msg"
+
+decodeLocation : Decoder Location
+decodeLocation =
+  decode Location
+    |> required "protocol" Decode.string
+    |> required "hash" Decode.string
+    |> required "search" Decode.string
+    |> required "pathname" Decode.string
+    |> required "port_" Decode.string
+    |> required "hostname" Decode.string
+    |> required "host" Decode.string
+    |> required "origin" Decode.string
+    |> required "href" Decode.string
+    |> required "username" Decode.string
+    |> required "password" Decode.string
 
 decodePost : Decoder (Socket, String)
 decodePost =

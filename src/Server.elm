@@ -10,6 +10,8 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
+import Navigation exposing (Location)
+
 import Chat
 
 
@@ -40,7 +42,7 @@ port outputWSS : Encode.Value -> Cmd msg
 type alias Model = Chat.Model
 
 type Msg
-  = Connection Socket
+  = Connection Socket Location
   | Disconnection Socket
   | Post Socket String
   | Join Socket String
@@ -64,14 +66,14 @@ decodeConfig =
 update : Msg -> Model -> (Model, Cmd msg)
 update message model =
   case message of
-    Connection socket ->
+    Connection socket location ->
       if (Set.size model.connections) <= maxConnections then
         let
-          newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket) model)
+          newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket location) model)
           commands =
             Cmd.batch <|
               (sendToOne outputWSS (Chat.encodeMessage (Chat.Init newModel)) socket)
-              :: (sendToMany outputWSS (Chat.encodeMessage (Chat.Connection socket)) (Set.toList model.connections))
+              :: (sendToMany outputWSS (Chat.encodeMessage (Chat.Connection socket location)) (Set.toList model.connections))
         in
           ( newModel
           , commands

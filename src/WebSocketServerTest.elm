@@ -5,7 +5,7 @@ import Expect
 import String
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
-
+import Navigation exposing (Location)
 
 import WebSocketServer exposing (..)
 
@@ -13,7 +13,20 @@ connectionJSON : String
 connectionJSON = """
 {
   "type": "Connection",
-  "id": "abc"
+  "id": "abc",
+  "location": {
+    "protocol": "ws:",
+    "hash": "",
+    "search": "",
+    "pathname": "/123",
+    "port_": "8080",
+    "hostname": "localhost",
+    "host": "localhost:8080",
+    "origin": "ws://localhost:8080",
+    "href": "ws://localhost:8080/123",
+    "username" : "",
+    "password" : ""
+  }
 }
 """
 
@@ -36,7 +49,7 @@ messageJSON = """
 
 
 type Msg
-  = Connection Socket
+  = Connection Socket Location
   | Disconnection Socket
   | Message Socket String
 
@@ -64,7 +77,7 @@ tests =
       [ test "decodes Connection events" <|
         \() ->
           expectDecode (eventDecoder config) connectionJSON
-            (flip Expect.equal (Connection "abc"))
+            (flip Expect.equal (Connection "abc" (Location "ws:" "" "" "/123" "8080" "localhost" "localhost:8080" "ws://localhost:8080" "ws://localhost:8080/123" "" "")))
       , test "decodes Disconnection events" <|
         \() ->
           expectDecode (eventDecoder config) disconnectionJSON

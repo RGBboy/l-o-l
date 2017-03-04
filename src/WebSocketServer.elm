@@ -18,8 +18,8 @@ type alias Socket = String
 
 type alias Config msg =
   { onConnection : Socket -> Location -> msg
-  , onDisconnection: Socket -> msg
-  , onMessage: Socket -> Decoder msg
+  , onDisconnection: Socket -> Location -> msg
+  , onMessage: Socket -> Location -> Decoder msg
   }
 
 
@@ -81,9 +81,15 @@ msgTypeDecoder config kind =
     "Disconnection" ->
       decode config.onDisconnection
         |> required "id" Decode.string
+        |> required "location" decodeLocation
     "Message" ->
-      Decode.field "id" Decode.string
-       |> Decode.andThen (config.onMessage >> Decode.field "message")
+      decode config.onMessage
+        |> required "id" Decode.string
+        |> required "location" decodeLocation
+        |> Decode.andThen (Decode.field "message")
+      -- Decode.field "id" Decode.string
+      --   |> Decode.andThen (Decode.field "location" decodeLocation)
+      --   |> Decode.andThen (config.onMessage >> Decode.field "message")
     _ -> Decode.fail ("Could not decode msg of type " ++ kind)
 
 decodeLocation : Decoder Location

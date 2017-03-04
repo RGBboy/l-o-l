@@ -9,6 +9,9 @@ import Navigation exposing (Location)
 
 import WebSocketServer exposing (..)
 
+location : Location
+location = (Location "ws:" "" "" "/123" "8080" "localhost" "localhost:8080" "ws://localhost:8080" "ws://localhost:8080/123" "" "")
+
 connectionJSON : String
 connectionJSON = """
 {
@@ -30,11 +33,26 @@ connectionJSON = """
 }
 """
 
+
+
 disconnectionJSON : String
 disconnectionJSON = """
 {
   "type": "Disconnection",
-  "id": "abc"
+  "id": "abc",
+  "location": {
+    "protocol": "ws:",
+    "hash": "",
+    "search": "",
+    "pathname": "/123",
+    "port_": "8080",
+    "hostname": "localhost",
+    "host": "localhost:8080",
+    "origin": "ws://localhost:8080",
+    "href": "ws://localhost:8080/123",
+    "username" : "",
+    "password" : ""
+  }
 }
 """
 
@@ -43,6 +61,19 @@ messageJSON = """
 {
   "type": "Message",
   "id": "abc",
+  "location": {
+    "protocol": "ws:",
+    "hash": "",
+    "search": "",
+    "pathname": "/123",
+    "port_": "8080",
+    "hostname": "localhost",
+    "host": "localhost:8080",
+    "origin": "ws://localhost:8080",
+    "href": "ws://localhost:8080/123",
+    "username" : "",
+    "password" : ""
+  },
   "message": "Test"
 }
 """
@@ -50,8 +81,8 @@ messageJSON = """
 
 type Msg
   = Connection Socket Location
-  | Disconnection Socket
-  | Message Socket String
+  | Disconnection Socket Location
+  | Message Socket Location String
 
 config : Config Msg
 config =
@@ -60,10 +91,10 @@ config =
   , onMessage = decodeMessage
   }
 
-decodeMessage : Socket -> Decoder Msg
-decodeMessage socket =
+decodeMessage : Socket -> Location -> Decoder Msg
+decodeMessage socket location =
   Decode.string
-    |> Decode.map (Message socket)
+    |> Decode.map (Message socket location)
 
 expectDecode : Decoder a -> String -> (a -> Expect.Expectation) -> Expect.Expectation
 expectDecode decoder input expectation =
@@ -77,15 +108,15 @@ tests =
       [ test "decodes Connection events" <|
         \() ->
           expectDecode (eventDecoder config) connectionJSON
-            (flip Expect.equal (Connection "abc" (Location "ws:" "" "" "/123" "8080" "localhost" "localhost:8080" "ws://localhost:8080" "ws://localhost:8080/123" "" "")))
+            (flip Expect.equal (Connection "abc" location))
       , test "decodes Disconnection events" <|
         \() ->
           expectDecode (eventDecoder config) disconnectionJSON
-            (flip Expect.equal (Disconnection "abc"))
+            (flip Expect.equal (Disconnection "abc" location))
       , test "decodes Message events" <|
         \() ->
           expectDecode (eventDecoder config) messageJSON
-            (flip Expect.equal (Message "abc" "Test"))
+            (flip Expect.equal (Message "abc" location "Test"))
       ]
     , describe ".close"
       [ test "close" <|

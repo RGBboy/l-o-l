@@ -1,3 +1,11 @@
+module Client exposing
+  ( Model
+  , initModel
+  , init
+  , Msg( ServerMessage )
+  , subscriptions
+  )
+
 import Html as H exposing (Html)
 import Html.Attributes as A
 import Html.Events as E
@@ -37,17 +45,25 @@ type alias Model =
   , input: String
   , name: String
   , status: Status
+  , server: String
+  , secret: Maybe String
   , time: Time
+  }
+
+initModel : String -> Model
+initModel server =
+  { chat = Chat.init server
+  , input = ""
+  , name = ""
+  , status = Disconnected
+  , server = server
+  , secret = Nothing
+  , time = 0
   }
 
 init : String -> (Model, Cmd Msg)
 init server =
-  ( { chat = Chat.init server
-    , input = ""
-    , name = ""
-    , status = Disconnected
-    , time = 0
-    }
+  ( initModel server
   , Cmd.none
   )
 
@@ -61,7 +77,7 @@ type Msg
   | InputName String
   | Connect
   | Disconnect
-  | Message Chat.Msg
+  | ServerMessage String
   | Tick Time
   | Noop
 
@@ -103,13 +119,13 @@ update message model =
         }
       , Cmd.none
       )
-    Message message ->
-      let
-        (chat, cmd) = Chat.update message model.chat
-      in
-        ( { model | chat = chat }
-        , cmd
-        )
+    -- Message message ->
+    --   let
+    --     (chat, cmd) = Chat.update message model.chat
+    --   in
+    --     ( { model | chat = chat }
+    --     , cmd
+    --     )
     Tick time ->
       ( { model | time = time }
       , Cmd.none
@@ -120,15 +136,20 @@ update message model =
 
 -- SUBSCRIPTIONS
 
+-- subscriptions : Model -> Sub Msg
+-- subscriptions model =
+--   if model.status == Connected then
+--     Sub.batch
+--       [ Sub.map Message (Chat.listen model.chat)
+--       , Time.every (100 * Time.millisecond) Tick
+--       ]
+--   else
+--     Time.every (100 * Time.millisecond) Tick
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  if model.status == Connected then
-    Sub.batch
-      [ Sub.map Message (Chat.listen model.chat)
-      , Time.every (100 * Time.millisecond) Tick
-      ]
-  else
-    Time.every (100 * Time.millisecond) Tick
+  Maybe.map (\secret -> WebSocket.listen (model.server ++ "/" ++ secret) ServerMessage) model.secret
+    |> Maybe.withDefault Sub.none
 
 
 

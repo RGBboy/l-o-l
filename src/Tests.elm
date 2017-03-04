@@ -6,7 +6,7 @@ import Json.Encode exposing (Value)
 
 import WebSocketServerTest
 import ClientChatTest
-
+import ClientTest
 
 
 all : Test
@@ -14,6 +14,7 @@ all =
   describe "l-o-l"
     [ WebSocketServerTest.tests
     , ClientChatTest.tests
+    , ClientTest.tests
     ]
 
 

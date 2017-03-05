@@ -90,7 +90,9 @@ update message model =
           | posts = List.take maxPosts <| (id, post) :: model.posts
           }
       in
-        ( newModel, [] )
+        ( newModel
+        , outputToAll newModel.connections (OutputPost id post)
+        )
     UpdateName id name ->
       let
         -- need to deref connection to public id
@@ -99,4 +101,6 @@ update message model =
           | userNames = Dict.insert id name model.userNames
           }
       in
-        ( newModel, [] )
+        ( newModel
+        , outputToAll newModel.connections (OutputUpdateName id name)
+        )

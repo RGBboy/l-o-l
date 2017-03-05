@@ -53,6 +53,13 @@ type OutputMsg
 
 type alias Output = (ID, OutputMsg)
 
+output : OutputMsg -> ID -> (ID, OutputMsg)
+output message id = (id, message)
+
+outputToAll : Set ID -> OutputMsg -> List (ID, OutputMsg)
+outputToAll users message =
+  List.map (output message) (Set.toList users)
+
 update : InputMsg -> Model -> (Model, List Output)
 update message model =
   case message of
@@ -72,7 +79,9 @@ update message model =
           | connections = Set.remove id model.connections
           }
       in
-        ( newModel, [] )
+        ( newModel
+        , outputToAll newModel.connections (OutputDisconnection id)
+        )
     Post id post ->
       let
         -- need to deref connection to public id

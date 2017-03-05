@@ -73,7 +73,7 @@ tests =
               |> Tuple.first
               |> update (Disconnection "A")
           in
-            Expect.true "List to contain message" (List.member ("A", OutputDisconnection "B") messages)
+            Expect.true "List to contain message" (List.member ("B", OutputDisconnection "A") messages)
       ]
     , describe ".update Post"
       [ test "adds post to model.posts" <|

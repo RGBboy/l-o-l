@@ -7,6 +7,7 @@ import Json.Encode exposing (Value)
 import WebSocketServerTest
 import ClientChatTest
 import ClientTest
+import ServerChatTest
 
 
 all : Test
@@ -15,6 +16,7 @@ all =
     [ WebSocketServerTest.tests
     , ClientChatTest.tests
     , ClientTest.tests
+    , ServerChatTest.tests
     ]
 
 

@@ -71,7 +71,9 @@ update message model =
           , users = Dict.insert secret id model.users
           }
       in
-        ( newModel, [] )
+        ( newModel
+        , outputToAll model.connections (OutputConnection id)
+        )
     Disconnection id ->
       let
         newModel =

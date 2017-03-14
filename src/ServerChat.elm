@@ -1,9 +1,11 @@
 module ServerChat exposing
   ( Model
   , init
+  , ClientModel
+  , clientModel
   , update
   , InputMsg(Connection, Disconnection, Post, UpdateName)
-  , OutputMsg(OutputInit, OutputConnection, OutputDisconnection, OutputPost, OutputUpdateName)
+  , OutputMsg(OutputInit, OutputConnection, OutputPost, OutputUpdateName)
   , Output
   )
 
@@ -14,11 +16,13 @@ import Dict exposing (Dict)
 
 type alias Secret = String
 
-type alias ID = String
+type alias Public = Secret -- Change to be something else
+
+type alias Connection = String
 
 type alias Model =
-  { connections: Set ID
-  , users: Dict Secret ID
+  { connections: Set Connection
+  , users: Dict Connection Secret
   , userNames: Dict Secret String
   , posts: List (Secret, String)
   }
@@ -31,6 +35,21 @@ init =
   , posts = []
   }
 
+type alias ClientModel =
+  { id: Public
+  , users: Set Public
+  , userNames: Dict Public String
+  , posts: List (Public, String)
+  }
+
+clientModel : Model -> Public -> ClientModel
+clientModel model id =
+  { id = id
+  , users = Set.fromList (Dict.values model.users)
+  , userNames = model.userNames
+  , posts = model.posts
+  }
+
 maxPosts : Int
 maxPosts = 8
 
@@ -39,70 +58,88 @@ maxPosts = 8
 -- UPDATE
 
 type InputMsg
-  = Connection ID Secret
-  | Disconnection ID
-  | Post ID String
-  | UpdateName ID String
+  = Connection Connection Secret
+  | Disconnection Connection
+  | Post Connection String
+  | UpdateName Connection String
 
 type OutputMsg
-  = OutputInit Model -- Change this so that we do not expose secrets
-  | OutputConnection ID
-  | OutputDisconnection ID
-  | OutputPost ID String
-  | OutputUpdateName ID String
+  = OutputInit ClientModel
+  | OutputConnection Public
+  | OutputPost Public String
+  | OutputUpdateName Public String
 
-type alias Output = (ID, OutputMsg)
+type alias Output = (Connection, OutputMsg)
 
-output : OutputMsg -> ID -> (ID, OutputMsg)
-output message id = (id, message)
+output : OutputMsg -> Connection -> (Connection, OutputMsg)
+output message connection = (connection, message)
 
-outputToAll : Set ID -> OutputMsg -> List (ID, OutputMsg)
-outputToAll users message =
-  List.map (output message) (Set.toList users)
+outputToOthers : Set Connection -> Connection -> OutputMsg -> List (Connection, OutputMsg)
+outputToOthers connections connection message =
+  outputToAll (Set.remove connection connections) message
+
+outputToAll : Set Connection -> OutputMsg -> List (Connection, OutputMsg)
+outputToAll connections message =
+  List.map (output message) (Set.toList connections)
 
 update : InputMsg -> Model -> (Model, List Output)
 update message model =
   case message of
-    Connection id secret ->
+    Connection connection secret ->
       let
         newModel =
           { model
-          | connections = Set.insert id model.connections
-          , users = Dict.insert secret id model.users
+          | connections = Set.insert connection model.connections
+          , users = Dict.insert connection secret model.users
           }
+        initClient = OutputInit (clientModel newModel secret) -- change this to public id instead of secret
       in
         ( newModel
-        , outputToAll model.connections (OutputConnection id)
+        , (output initClient connection) :: (outputToOthers model.connections connection (OutputConnection secret))
         )
-    Disconnection id ->
+    Disconnection connection ->
       let
         newModel =
           { model
-          | connections = Set.remove id model.connections
+          | connections = Set.remove connection model.connections
           }
       in
         ( newModel
-        , outputToAll newModel.connections (OutputDisconnection id)
+        , []
         )
-    Post id post ->
+    Post connection post ->
       let
         -- need to deref connection to public id
+        user = Dict.get connection model.users
+        newPost = Maybe.map (\public -> (public, post)) user
+        newPosts = Maybe.map List.singleton newPost
+          |> Maybe.withDefault []
         newModel =
           { model
-          | posts = List.take maxPosts <| (id, post) :: model.posts
+          | posts = List.take maxPosts <| (List.append newPosts model.posts)
           }
+        output = (uncurry OutputPost) >> outputToAll newModel.connections
+        newMessages = Maybe.map output newPost
+          |> Maybe.withDefault []
       in
         ( newModel
-        , outputToAll newModel.connections (OutputPost id post)
+        , newMessages
         )
-    UpdateName id name ->
+    UpdateName connection name ->
       let
         -- need to deref connection to public id
+        user = Dict.get connection model.users
+        newUserName = Maybe.map (\public -> (public, name)) user
+        newUserNames = Maybe.map (uncurry Dict.singleton) newUserName
+          |> Maybe.withDefault Dict.empty
         newModel =
           { model
-          | userNames = Dict.insert id name model.userNames
+          | userNames = Dict.union newUserNames model.userNames
           }
+        output = (uncurry OutputUpdateName) >> outputToAll newModel.connections
+        newMessages = Maybe.map output newUserName
+          |> Maybe.withDefault []
       in
         ( newModel
-        , outputToAll newModel.connections (OutputUpdateName id name)
+        , newMessages
         )

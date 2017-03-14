@@ -1,6 +1,7 @@
 module ServerChatTest exposing (tests)
 
 import Test exposing (Test, describe, test)
+import Expect.Extra as Expect
 import Expect
 import String
 import Set
@@ -30,13 +31,14 @@ tests =
           let
             (newModel, _) = initialUpdate
           in
-            Expect.equal serverWithConnection.users (Dict.fromList [("secretA", "A")])
+            Expect.equal serverWithConnection.users (Dict.fromList [("A", "secretA")])
       , test "returns init message for new connection" <|
         \() ->
           let
-            (_, messages) = initialUpdate
+            (newModel, messages) = initialUpdate
+            outputInit = OutputInit (clientModel newModel "secretA")
           in
-            Expect.true "List to contain message" (List.member ("A", OutputInit init) messages)
+            Expect.contain ("A", outputInit) messages
       , test "returns connection message for other connections" <|
         \() ->
           let
@@ -44,7 +46,7 @@ tests =
                 |> Tuple.first
                 |> update (Connection "B" "secretB")
           in
-            Expect.true "List to contain message" (List.member ("A", OutputConnection "B") messages)
+            Expect.contain ("A", OutputConnection "secretB") messages
 
       ]
     , describe ".update Disconnection"
@@ -64,7 +66,7 @@ tests =
               |> update (Disconnection "A")
           in
             Expect.equal newModel.users serverWithConnection.users
-      , test "returns disconnection message for other connections" <|
+      , test "returns no messages for connections" <|
         \() ->
           let
             (_, messages) = initialUpdate
@@ -73,7 +75,7 @@ tests =
               |> Tuple.first
               |> update (Disconnection "A")
           in
-            Expect.true "List to contain message" (List.member ("B", OutputDisconnection "A") messages)
+            Expect.equal messages []
       ]
     , describe ".update Post"
       [ test "adds post to model.posts" <|
@@ -83,7 +85,7 @@ tests =
               |> Tuple.first
               |> update (Post "A" "Test")
           in
-            Expect.equal newModel.posts [("A", "Test")]
+            Expect.equal newModel.posts [("secretA", "Test")]
       , test "returns post message to all connections" <|
         \() ->
           let
@@ -91,7 +93,7 @@ tests =
               |> Tuple.first
               |> update (Post "A" "Test")
           in
-            Expect.true "List to contain message" (List.member ("A", OutputPost "A" "Test") messages)
+            Expect.contain ("A", OutputPost "secretA" "Test") messages
       ]
     , describe ".update UpdateName"
       [ test "updates name in model.userNames" <|
@@ -101,7 +103,7 @@ tests =
               |> Tuple.first
               |> update (UpdateName "A" "Test")
           in
-            Expect.equal newModel.userNames (Dict.fromList [("A", "Test")])
+            Expect.equal newModel.userNames (Dict.fromList [("secretA", "Test")])
       , test "returns UpdateName message to all connections" <|
         \() ->
           let
@@ -112,8 +114,8 @@ tests =
               |> update (UpdateName "A" "Test")
           in
             Expect.all
-              [ \messages -> Expect.true "List to contain message" (List.member ("A", OutputUpdateName "A" "Test") messages)
-              , \messages -> Expect.true "List to contain message" (List.member ("B", OutputUpdateName "A" "Test") messages)
+              [ \messages -> Expect.contain ("A", OutputUpdateName "secretA" "Test") messages
+              , \messages -> Expect.contain ("B", OutputUpdateName "secretA" "Test") messages
               ]
               messages
       ]

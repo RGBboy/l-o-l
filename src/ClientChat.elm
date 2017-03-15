@@ -1,108 +1,150 @@
 module ClientChat exposing
   ( Model
   , init
+  , ClientModel
+  , initClientModel
   , update
-  , Msg(ServerMessage, ClientPost, ClientJoin)
-  , connections
+  , Msg(ClientPost, ClientUpdateName, ServerInit, ServerConnection, ServerPost, ServerUpdateName)
   , posts
-  , users
-  , listen
-  , encodeValue
+  , userNames
   )
-
-import WebSocket
-import WebSocketServer as WSS exposing (Socket)
 
 import List.Extra as ListExtra
 import Set exposing (Set)
 import Dict exposing (Dict)
-
 import Json.Decode as Decode
 import Json.Encode as Encode
-
-import Chat
 
 
 -- MODEL
 
-type alias Model =
-  { server: String
-  , chat: Chat.Model
-  , optimisticPosts: List (Socket, String)
+type alias Private = String
+
+type alias Public = String
+
+type alias ClientModel =
+  { id: Public
+  , users: Set Public
+  , userNames: Dict Public String
+  , posts: List (Public, String)
   }
 
-init : String -> Model
-init server =
-  { server = server
-  , chat = Chat.init
+initClientModel : Public -> ClientModel
+initClientModel id =
+  { id = id
+  , users = Set.empty
+  , userNames = Dict.empty
+  , posts = []
+  }
+
+type alias Model =
+  { secret: Private
+  , chat: Maybe ClientModel
+  , optimisticPosts: List (Public, String)
+  }
+
+init : Private -> Model
+init secret =
+  { secret = secret
+  , chat = Nothing
   , optimisticPosts = []
   }
 
-connections : Model -> Set Socket
-connections model = model.chat.connections
+userNames : Model -> Dict Public String
+userNames model =
+  Maybe.map .userNames model.chat
+    |> Maybe.withDefault Dict.empty
 
-users : Model -> Dict Socket String
-users model = model.chat.users
-
-posts : Model -> List (Socket, String)
+posts : Model -> List (Public, String)
 posts model =
-  List.append model.optimisticPosts model.chat.posts
+  let
+    posts = Maybe.map .posts model.chat
+      |> Maybe.withDefault []
+  in
+    List.append model.optimisticPosts posts
 
 -- UPDATE
 
 type Msg
-  = ServerMessage Chat.Msg
-  | ClientPost String
-  | ClientJoin String
+  = ClientPost String
+  | ClientUpdateName String
+  | ServerInit ClientModel
+  | ServerConnection Public
+  | ServerPost Public String
+  | ServerUpdateName Public String
 
-update : Msg -> Model -> (Model, Cmd a)
+updatePost : String -> Model -> ClientModel -> (Model, Maybe Msg)
+updatePost post model clientModel =
+  ( { model
+    | optimisticPosts = (clientModel.id, post) :: model.optimisticPosts
+    }
+  , Just (ClientPost post)
+  )
+
+update : Msg -> Model -> (Model, Maybe Msg)
 update message model =
   case message of
-    ServerMessage message ->
-      let
-        chat = Debug.log "CHAT" (Chat.update message model.chat)
-        optimisticPosts =
-          case message of
-            Chat.Post socket post ->
-              removeFirst ((==) (socket, post)) model.optimisticPosts
-            _ -> model.optimisticPosts
-      in
-        ( { model
-          | chat = chat
-          , optimisticPosts = optimisticPosts
-          }
-        , Cmd.none
-        )
     ClientPost post ->
-      ( { model | optimisticPosts = (model.chat.socket, post) :: model.optimisticPosts }
-      , WebSocket.send model.server (encodeValue "Post" post)
-      )
-    ClientJoin name ->
+      Maybe.map (updatePost post model) model.chat
+        |> Maybe.withDefault (model, Nothing)
+    ClientUpdateName name ->
       ( model
-      , WebSocket.send model.server (encodeValue "Join" name)
+      , Just message
       )
+    ServerInit init ->
+      ( { model
+        | chat = Just init
+        }
+      , Nothing
+      )
+    ServerConnection id ->
+      ( model
+      , Nothing
+      )
+    ServerPost id post ->
+      ( model
+      , Nothing
+      )
+    ServerUpdateName id name ->
+      ( model
+      , Nothing
+      )
+      -- let
+      --   chat = Debug.log "CHAT" (Chat.update message model.chat)
+      --   optimisticPosts =
+      --     case message of
+      --       Chat.Post socket post ->
+      --         removeFirst ((==) (socket, post)) model.optimisticPosts
+      --       _ -> model.optimisticPosts
+      -- in
+      --   ( { model
+      --     | chat = chat
+      --     , optimisticPosts = optimisticPosts
+      --     }
+      --   , Nothing
+      --   )
+
+-- removeFirst : (a -> Bool) -> List a -> List a
+-- removeFirst predicate list =
+--   let
+--     (h, t) = ListExtra.break predicate list
+--     tail = Maybe.withDefault [] (List.tail t)
+--   in
+--     List.append h tail
+
+
+-- Encoding
+
+-- encodeValue : String -> String -> String
+-- encodeValue kind value =
+--   Encode.object
+--     [ ("type", Encode.string kind)
+--     , ("value", Encode.string value)
+--     ]
+--   |> Encode.encode 2
 
 
 
--- SUBSCRIPTIONS
+-- Decoding
 
-listen : Model -> Sub Msg
-listen model = Sub.map ServerMessage (WebSocket.listen model.server Chat.decodeMessage)
-
-decodeMessage = Chat.decodeMessage
-
-encodeValue : String -> String -> String
-encodeValue kind value =
-  Encode.object
-    [ ("type", Encode.string kind)
-    , ("value", Encode.string value)
-    ]
-  |> Encode.encode 2
-
-removeFirst : (a -> Bool) -> List a -> List a
-removeFirst predicate list =
-  let
-    (h, t) = ListExtra.break predicate list
-    tail = Maybe.withDefault [] (List.tail t)
-  in
-    List.append h tail
+-- decodeMessage = Chat.decodeMessage

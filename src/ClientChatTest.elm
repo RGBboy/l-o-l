@@ -2,48 +2,77 @@ module ClientChatTest exposing (tests)
 
 import Test exposing (Test, describe, test)
 import Expect
-import String
-import WebSocket
 
 import ClientChat exposing (..)
 
+beforeInitModel : Model
+beforeInitModel = init "ABC"
 
+clientModel : ClientModel
+clientModel = initClientModel "123"
 
-server : String
-server = "wss://test.com"
-
-model : Model
-model = init server
+afterInitModel : Model
+afterInitModel = Tuple.first (update (ServerInit clientModel) beforeInitModel)
 
 tests : Test
 tests =
   describe "ClientChat"
     [ describe ".update ClientPost"
-      [ test "returns send Post command" <|
-        \() ->
-          let
-            (_, cmd) = update (ClientPost "Test") model
-          in
-            Expect.equal cmd (WebSocket.send server (encodeValue "Post" "Test"))
-      , test "adds optimisticPost to model" <|
-        \() ->
-          let
-            (newModel, _) = update (ClientPost "Test") model
-          in
-            Expect.equal (List.length newModel.optimisticPosts) ((List.length model.optimisticPosts) + 1)
+      [ describe "before init event"
+        [ test "adds optimisticPost to model" <|
+          \() ->
+            let
+              (newModel, _) = update (ClientPost "Test") beforeInitModel
+            in
+              Expect.equal newModel.optimisticPosts beforeInitModel.optimisticPosts
+        , test "returns no message" <|
+          \() ->
+            let
+              (_, message) = update (ClientPost "Test") beforeInitModel
+            in
+              Expect.equal message Nothing
+        ]
+      , describe "after init event"
+        [ test "adds optimisticPost to model" <|
+          \() ->
+            let
+              (newModel, _) = update (ClientPost "Test") afterInitModel
+            in
+              Expect.equal (List.length newModel.optimisticPosts) ((List.length afterInitModel.optimisticPosts) + 1)
+        , test "returns send Post command" <|
+          \() ->
+            let
+              (_, message) = update (ClientPost "Test") afterInitModel
+            in
+              Expect.equal message (Just (ClientPost "Test"))
+        ]
       ]
-    , describe ".update ClientJoin"
-      [ test "returns send Post command" <|
+    , describe ".update ClientUpdateName"
+      [ test "returns same model" <|
         \() ->
           let
-            (_, cmd) = update (ClientJoin "Test") model
+            (newModel, _) = update (ClientUpdateName "Test") beforeInitModel
           in
-            Expect.equal cmd (WebSocket.send server (encodeValue "Join" "Test"))
-      , test "returns same model" <|
+            Expect.equal beforeInitModel newModel
+      , test "returns send UpdateName command" <|
         \() ->
           let
-            (newModel, _) = update (ClientJoin "Test") model
+            (_, message) = update (ClientUpdateName "Test") beforeInitModel
           in
-            Expect.equal model newModel
+            Expect.equal message (Just (ClientUpdateName "Test"))
+      ]
+    , describe ".update ServerInit"
+      [ test "updates chat" <|
+        \() ->
+          let
+            (newModel, _) = update (ServerInit clientModel) beforeInitModel
+          in
+            Expect.equal newModel.chat (Just clientModel)
+      , test "returns no message" <|
+        \() ->
+          let
+            (_, message) = update (ServerInit clientModel) beforeInitModel
+          in
+            Expect.equal message Nothing
       ]
     ]

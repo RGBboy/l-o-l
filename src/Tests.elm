@@ -5,18 +5,18 @@ import Test.Runner.Node exposing (run, TestProgram)
 import Json.Encode exposing (Value)
 
 import WebSocketServerTest
-import ClientChatTest
-import ClientTest
 import ServerChatTest
+import ClientChatTest
+--import ClientTest
 
 
 all : Test
 all =
   describe "l-o-l"
     [ WebSocketServerTest.tests
-    , ClientChatTest.tests
-    , ClientTest.tests
     , ServerChatTest.tests
+    , ClientChatTest.tests
+    --, ClientTest.tests
     ]
 
 

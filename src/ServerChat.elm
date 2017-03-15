@@ -7,10 +7,17 @@ module ServerChat exposing
   , InputMsg(Connection, Disconnection, Post, UpdateName)
   , OutputMsg(OutputInit, OutputConnection, OutputPost, OutputUpdateName)
   , Output
+  , encodeOutputMsg
+  , decodeInputMsg
   )
 
 import Set exposing (Set)
 import Dict exposing (Dict)
+import Json.Decode as Decode exposing (Decoder)
+import Json.Decode.Pipeline exposing (custom, decode, required)
+import Json.Encode as Encode
+
+
 
 -- MODEL
 
@@ -143,3 +150,61 @@ update message model =
         ( newModel
         , newMessages
         )
+
+
+
+--- Encoding
+
+encodeOutputPost : (Public, String) -> Encode.Value
+encodeOutputPost (id, post) =
+  Encode.object
+    [ ("id", Encode.string id)
+    , ("post", Encode.string post)
+    ]
+
+encodeOutputMsg : OutputMsg -> Encode.Value
+encodeOutputMsg message =
+  case message of
+    OutputInit model ->
+      Encode.object
+        [ ("type", Encode.string "Init")
+        , ("id", Encode.string model.id)
+        , ("users", Encode.list (List.map Encode.string (Set.toList model.users)) )
+        , ("userNames", Encode.object (Dict.toList (Dict.map (always Encode.string) model.userNames)) )
+        , ("posts", Encode.list (List.map encodeOutputPost model.posts) )
+        ]
+    OutputConnection connection ->
+      Encode.object
+        [ ("type", Encode.string "Connection")
+        , ("id", Encode.string connection)
+        ]
+    OutputUpdateName connection name ->
+      Encode.object
+        [ ("type", Encode.string "UpdateName")
+        , ("id", Encode.string connection)
+        , ("value", Encode.string name)
+        ]
+    OutputPost connection message ->
+      Encode.object
+        [ ("type", Encode.string "Post")
+        , ("id", Encode.string connection)
+        , ("value", Encode.string message)
+        ]
+
+
+
+--- Decoding
+
+decodeInputMsg : Connection -> Decoder InputMsg
+decodeInputMsg connection =
+  Decode.field "type" Decode.string
+    |> Decode.andThen (decodeInputMsgType connection)
+
+decodeInputMsgType : Connection -> String -> Decoder InputMsg
+decodeInputMsgType connection kind =
+  case kind of
+    "UpdateName" ->
+      Decode.map (UpdateName connection) Decode.string
+    "Post" ->
+      Decode.map (Post connection) Decode.string
+    _ -> Decode.fail "Could not decode Msg"

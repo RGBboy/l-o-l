@@ -12,7 +12,7 @@ import Json.Encode as Encode
 
 import Navigation exposing (Location)
 
-import Chat
+import ServerChat
 
 
 
@@ -39,91 +39,67 @@ port outputWSS : Encode.Value -> Cmd msg
 
 -- MODEL
 
-type alias Model = Chat.Model
-
-type Msg
-  = Connection Socket Location
-  | Disconnection Socket
-  | Post Socket String
-  | Join Socket String
-  | Noop
+type alias Model = ServerChat.Model
 
 init : (Model, Cmd msg)
 init =
-  (Chat.init, Cmd.none)
+  (ServerChat.init, Cmd.none)
 
+onConnection : Socket -> Location -> ServerChat.InputMsg
+onConnection socket _ =
+  ServerChat.Connection socket "ABC" -- change to figure out secret from Location
 
+onDisconnection : Socket -> Location -> ServerChat.InputMsg
+onDisconnection socket _ =
+  ServerChat.Disconnection socket
+
+onMessage : Socket -> Location -> Decoder ServerChat.InputMsg
+onMessage socket _ =
+  ServerChat.decodeInputMsg socket
 
 -- UPDATE
 
-decodeConfig : WSS.Config Msg
-decodeConfig =
-  { onConnection = Connection
-  , onDisconnection = Disconnection
-  , onMessage = decodeClientMessage
-  }
+type Msg
+  = ServerMsg ServerChat.InputMsg
+  | Noop
+
+sendMessage : (Socket, ServerChat.OutputMsg) -> Cmd msg
+sendMessage (socket, message) =
+  sendToOne outputWSS (ServerChat.encodeOutputMsg message) socket
+
+sendMessages : List (Socket, ServerChat.OutputMsg) -> Cmd msg
+sendMessages messages =
+  Cmd.batch <|
+    List.map sendMessage messages
 
 update : Msg -> Model -> (Model, Cmd msg)
 update message model =
   case message of
-    Connection socket location ->
-      if (Set.size model.connections) <= maxConnections then
-        let
-          newModel = Chat.updateSocket socket (Chat.update (Chat.Connection socket location) model)
-          commands =
-            Cmd.batch <|
-              (sendToOne outputWSS (Chat.encodeMessage (Chat.Init newModel)) socket)
-              :: (sendToMany outputWSS (Chat.encodeMessage (Chat.Connection socket location)) (Set.toList model.connections))
-        in
-          ( newModel
-          , commands
-          )
-      else
-        (model, WSS.close outputWSS socket)
-    Disconnection socket ->
-      -- Handle if we closed the connection immediately
-      if (Set.member socket model.connections) then
-        ( Chat.update (Chat.Disconnection socket) model
-        , Cmd.batch <|
-            sendToMany outputWSS (Chat.encodeMessage (Chat.Disconnection socket)) (Set.toList model.connections)
+    ServerMsg m ->
+      let
+        (newModel, messages) = ServerChat.update m model
+      in
+        ( newModel
+        , sendMessages messages
         )
-      else
-        (model, Cmd.none)
-    Post socket post ->
-      ( Chat.update (Chat.Post socket post) model
-      , Cmd.batch <|
-          sendToMany outputWSS (Chat.encodeMessage (Chat.Post socket post)) (Set.toList model.connections)
-      )
-    Join socket name ->
-      ( Chat.update (Chat.Join socket name) model
-      , Cmd.batch <|
-          sendToMany outputWSS (Chat.encodeMessage (Chat.Join socket name)) (Set.toList model.connections)
-      )
     Noop -> (model, Cmd.none)
 
 
 
 -- SUBSCRIPTIONS
 
+decodeConfig : WSS.Config ServerChat.InputMsg
+decodeConfig =
+  { onConnection = onConnection
+  , onDisconnection = onDisconnection
+  , onMessage = onMessage
+  }
+
 decodeMsg : Decode.Value -> Msg
 decodeMsg value =
-  Result.withDefault Noop (Decode.decodeValue (WSS.eventDecoder decodeConfig) value)
+  Decode.decodeValue (WSS.eventDecoder decodeConfig) value
+    |> Result.map ServerMsg
+    |> Result.withDefault Noop
 
 subscriptions : Model -> Sub Msg
 subscriptions model = inputWSS decodeMsg
-
-decodeClientMessage : Socket -> Decoder Msg
-decodeClientMessage socket =
-  Decode.field "type" Decode.string |> Decode.andThen (decodeClientMessageType socket)
-
-decodeClientMessageType : String -> String -> Decoder Msg
-decodeClientMessageType socket kind =
-  case kind of
-    "Post" ->
-      decode (Post socket)
-        |> required "value" Decode.string
-
-    "Join" ->
-      decode (Join socket)
-        |> required "value" Decode.string
-    _ -> Decode.fail "Could not decode Msg"

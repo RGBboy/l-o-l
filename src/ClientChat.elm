@@ -1,114 +1,92 @@
 module ClientChat exposing
-  ( Model
+  ( Public
+  , Model
   , init
-  , ClientModel
-  , initClientModel
+  , post
+  , updateName
   , update
-  , Msg(ClientPost, ClientUpdateName, ServerInit, ServerConnection, ServerPost, ServerUpdateName)
+  , InputMsg(ServerConnection, ServerPost, ServerUpdateName)
+  , OutputMsg(ClientPost, ClientUpdateName)
   , posts
   , userNames
+  , decodeInit
+  , decodeMessage
   )
 
 import List.Extra as ListExtra
 import Set exposing (Set)
 import Dict exposing (Dict)
-import Json.Decode as Decode
+import Json.Decode as Decode exposing (Decoder)
+import Json.Decode.Pipeline exposing (custom, required, hardcoded, decode)
 import Json.Encode as Encode
+
 
 
 -- MODEL
 
-type alias Private = String
-
 type alias Public = String
 
-type alias ClientModel =
+type alias Model =
   { id: Public
   , users: Set Public
   , userNames: Dict Public String
   , posts: List (Public, String)
-  }
-
-initClientModel : Public -> ClientModel
-initClientModel id =
-  { id = id
-  , users = Set.empty
-  , userNames = Dict.empty
-  , posts = []
-  }
-
-type alias Model =
-  { secret: Private
-  , chat: Maybe ClientModel
   , optimisticPosts: List (Public, String)
   }
 
-init : Private -> Model
-init secret =
-  { secret = secret
-  , chat = Nothing
-  , optimisticPosts = []
-  }
+init : Public -> Set Public -> Dict Public String -> List (Public, String) -> Model
+init id users userNames posts =
+  Model id users userNames posts []
 
 userNames : Model -> Dict Public String
-userNames model =
-  Maybe.map .userNames model.chat
-    |> Maybe.withDefault Dict.empty
+userNames model = model.userNames
 
 posts : Model -> List (Public, String)
 posts model =
-  let
-    posts = Maybe.map .posts model.chat
-      |> Maybe.withDefault []
-  in
-    List.append model.optimisticPosts posts
+  List.append model.optimisticPosts model.posts
+
+
 
 -- UPDATE
 
-type Msg
-  = ClientPost String
-  | ClientUpdateName String
-  | ServerInit ClientModel
-  | ServerConnection Public
+type InputMsg
+  = ServerConnection Public
   | ServerPost Public String
   | ServerUpdateName Public String
 
-updatePost : String -> Model -> ClientModel -> (Model, Maybe Msg)
-updatePost post model clientModel =
+type OutputMsg
+  = ClientPost String
+  | ClientUpdateName String
+
+post : String -> Model -> (Model, OutputMsg)
+post message model =
   ( { model
-    | optimisticPosts = (clientModel.id, post) :: model.optimisticPosts
+    | optimisticPosts = (model.id, message) :: model.optimisticPosts
     }
-  , Just (ClientPost post)
+  , ClientPost message
   )
 
-update : Msg -> Model -> (Model, Maybe Msg)
+updateName : String -> Model -> (Model, OutputMsg)
+updateName name model =
+  ( model
+  , ClientUpdateName name
+  )
+
+update : InputMsg -> Model -> Model
 update message model =
   case message of
-    ClientPost post ->
-      Maybe.map (updatePost post model) model.chat
-        |> Maybe.withDefault (model, Nothing)
-    ClientUpdateName name ->
-      ( model
-      , Just message
-      )
-    ServerInit init ->
-      ( { model
-        | chat = Just init
-        }
-      , Nothing
-      )
     ServerConnection id ->
-      ( model
-      , Nothing
-      )
+      { model
+      | users = Set.insert id model.users
+      }
     ServerPost id post ->
-      ( model
-      , Nothing
-      )
+      { model
+      | posts = (id, post) :: model.posts
+      }
     ServerUpdateName id name ->
-      ( model
-      , Nothing
-      )
+      { model
+      | userNames = Dict.insert id name model.userNames
+      }
       -- let
       --   chat = Debug.log "CHAT" (Chat.update message model.chat)
       --   optimisticPosts =
@@ -147,4 +125,37 @@ update message model =
 
 -- Decoding
 
--- decodeMessage = Chat.decodeMessage
+decodePost : Decoder (Public, String)
+decodePost =
+  decode (,)
+    |> required "id" Decode.string
+    |> required "post" Decode.string
+
+decodeInit : Decoder Model
+decodeInit =
+  decode Model
+    |> required "id" Decode.string
+    |> required "users" (decode Set.fromList |> custom (Decode.list Decode.string))
+    |> required "userNames" (Decode.dict Decode.string)
+    |> required "posts" (Decode.list decodePost)
+    |> hardcoded []
+
+decodeMessage : Decoder InputMsg
+decodeMessage =
+  Decode.field "type" Decode.string |> Decode.andThen decodeMessageType
+
+decodeMessageType : String -> Decoder InputMsg
+decodeMessageType kind =
+  case kind of
+    "Connection" ->
+      decode ServerConnection
+        |> required "id" Decode.string
+    "Post" ->
+      decode ServerPost
+        |> required "id" Decode.string
+        |> required "post" Decode.string
+    "UpdateName" ->
+      decode ServerUpdateName
+        |> required "id" Decode.string
+        |> required "name" Decode.string
+    _ -> Decode.fail "Could not decode Msg"

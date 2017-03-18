@@ -2,77 +2,119 @@ module ClientChatTest exposing (tests)
 
 import Test exposing (Test, describe, test)
 import Expect
+import Expect.Extra as Expect
+import Dict exposing (Dict)
+import Set exposing (Set)
+import Json.Decode as Decode
 
 import ClientChat exposing (..)
 
-beforeInitModel : Model
-beforeInitModel = init "ABC"
+initUsers : Set Public
+initUsers = Set.fromList [ "A", "B" ]
 
-clientModel : ClientModel
-clientModel = initClientModel "123"
+initUserNames : Dict Public String
+initUserNames = Dict.fromList [ ("A", "Alpha"), ("B", "Beta")]
 
-afterInitModel : Model
-afterInitModel = Tuple.first (update (ServerInit clientModel) beforeInitModel)
+initPosts : List (Public, String)
+initPosts = [ ("A", "message 1"), ("B", "message 2"), ("B", "message 3")]
+
+initModel : Model
+initModel = init "A" initUsers initUserNames initPosts
+
+initJSON : String
+initJSON = """
+{
+  "id": "A",
+  "users": [
+    "A",
+    "B"
+  ],
+  "userNames": {
+    "A": "Alpha",
+    "B": "Beta"
+  },
+  "posts": [
+    { "id": "A", "post": "message 1" },
+    { "id": "B", "post": "message 2" },
+    { "id": "B", "post": "message 3" }
+  ]
+}
+"""
 
 tests : Test
 tests =
   describe "ClientChat"
-    [ describe ".update ClientPost"
-      [ describe "before init event"
-        [ test "adds optimisticPost to model" <|
-          \() ->
-            let
-              (newModel, _) = update (ClientPost "Test") beforeInitModel
-            in
-              Expect.equal newModel.optimisticPosts beforeInitModel.optimisticPosts
-        , test "returns no message" <|
-          \() ->
-            let
-              (_, message) = update (ClientPost "Test") beforeInitModel
-            in
-              Expect.equal message Nothing
-        ]
-      , describe "after init event"
-        [ test "adds optimisticPost to model" <|
-          \() ->
-            let
-              (newModel, _) = update (ClientPost "Test") afterInitModel
-            in
-              Expect.equal (List.length newModel.optimisticPosts) ((List.length afterInitModel.optimisticPosts) + 1)
-        , test "returns send Post command" <|
-          \() ->
-            let
-              (_, message) = update (ClientPost "Test") afterInitModel
-            in
-              Expect.equal message (Just (ClientPost "Test"))
-        ]
+    [ describe ".init"
+      [ test "returns Model" <|
+        Expect.all
+          [ always (Expect.equal initModel.id "A")
+          , always (Expect.equal initModel.users initUsers)
+          , always (Expect.equal initModel.userNames initUserNames)
+          , always (Expect.equal initModel.posts initPosts)
+          , always (Expect.equal initModel.optimisticPosts [])
+          ]
       ]
-    , describe ".update ClientUpdateName"
+    , describe ".post"
+      [ test "adds optimisticPost to model" <|
+        \() ->
+          let
+            (newModel, _) = post "Test" initModel
+          in
+            Expect.equal (List.length newModel.optimisticPosts) ((List.length initModel.optimisticPosts) + 1)
+      , test "returns send Post command" <|
+        \() ->
+          let
+            (_, message) = post "Test" initModel
+          in
+            Expect.equal message (ClientPost "Test")
+      ]
+    , describe ".updateName"
       [ test "returns same model" <|
         \() ->
           let
-            (newModel, _) = update (ClientUpdateName "Test") beforeInitModel
+            (newModel, _) = updateName "Test" initModel
           in
-            Expect.equal beforeInitModel newModel
+            Expect.equal initModel newModel
       , test "returns send UpdateName command" <|
         \() ->
           let
-            (_, message) = update (ClientUpdateName "Test") beforeInitModel
+            (_, message) = updateName "Test" initModel
           in
-            Expect.equal message (Just (ClientUpdateName "Test"))
+            Expect.equal message (ClientUpdateName "Test")
       ]
-    , describe ".update ServerInit"
-      [ test "updates chat" <|
+    , describe ".update ServerConnection"
+      [ test "updates users" <|
         \() ->
           let
-            (newModel, _) = update (ServerInit clientModel) beforeInitModel
+            newModel = update (ServerConnection "ABC") initModel
           in
-            Expect.equal newModel.chat (Just clientModel)
-      , test "returns no message" <|
+            Expect.true "Contains ABC" (Set.member "ABC" newModel.users)
+      ]
+    , describe ".update ServerPost"
+      [ test "updates posts" <|
         \() ->
           let
-            (_, message) = update (ServerInit clientModel) beforeInitModel
+            newModel = update (ServerPost "A" "new message") initModel
           in
-            Expect.equal message Nothing
+            Expect.contain ("A", "new message") newModel.posts
       ]
+    , describe ".update ServerUpdateName"
+      [ test "updates userNames" <|
+        \() ->
+          let
+            newModel = update (ServerUpdateName "A" "Updated Name") initModel
+          in
+            Expect.equal (Dict.get "A" newModel.userNames) (Just "Updated Name")
+      ]
+    , describe ".decodeInit"
+      [ test "decodes Model" <|
+        \() ->
+          let
+            result = Decode.decodeString decodeInit initJSON
+            expected = initModel
+          in
+            Expect.equal result (Result.Ok expected)
+      ]
+    , describe ".decodeMessage"
+      []
     ]

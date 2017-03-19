@@ -22,8 +22,7 @@ initModel : Model
 initModel = init "A" initUsers initUserNames initPosts
 
 initJSON : String
-initJSON = """
-{
+initJSON = """{
   "id": "A",
   "users": [
     "A",
@@ -38,8 +37,41 @@ initJSON = """
     { "id": "B", "post": "message 2" },
     { "id": "B", "post": "message 3" }
   ]
-}
-"""
+}"""
+
+serverConnectionJSON : String
+serverConnectionJSON = """{
+  "type": "Connection",
+  "id": "A"
+}"""
+
+serverPostJSON : String
+serverPostJSON = """{
+  "type": "Post",
+  "id": "A",
+  "post": "message"
+}"""
+
+serverUpdateNameJSON : String
+serverUpdateNameJSON = """{
+  "type": "UpdateName",
+  "id": "A",
+  "name": "Alpha"
+}"""
+
+clientPostJSON : String
+clientPostJSON = """{
+  "type": "Post",
+  "post": "message"
+}"""
+
+clientUpdateNameJSON : String
+clientUpdateNameJSON = """{
+  "type": "UpdateName",
+  "name": "name"
+}"""
+
+
 
 tests : Test
 tests =
@@ -106,6 +138,14 @@ tests =
           in
             Expect.equal (Dict.get "A" newModel.userNames) (Just "Updated Name")
       ]
+    , describe ".encodeMessage"
+      [ test "encodes ClientPost" <|
+        \() ->
+          Expect.equal clientPostJSON (encodeMessage (ClientPost "message"))
+      , test "encodes ClientUpdateName" <|
+        \() ->
+          Expect.equal clientUpdateNameJSON (encodeMessage (ClientUpdateName "name"))
+      ]
     , describe ".decodeInit"
       [ test "decodes Model" <|
         \() ->
@@ -116,5 +156,26 @@ tests =
             Expect.equal result (Result.Ok expected)
       ]
     , describe ".decodeMessage"
-      []
+      [ test "decodes ServerConnection message" <|
+        \() ->
+          let
+            result = Decode.decodeString decodeMessage serverConnectionJSON
+            expected = ServerConnection "A"
+          in
+            Expect.equal result (Result.Ok expected)
+      , test "decodes ServerPost message" <|
+        \() ->
+          let
+            result = Decode.decodeString decodeMessage serverPostJSON
+            expected = ServerPost "A" "message"
+          in
+            Expect.equal result (Result.Ok expected)
+      , test "decodes ServerUpdateName message" <|
+        \() ->
+          let
+            result = Decode.decodeString decodeMessage serverUpdateNameJSON
+            expected = ServerUpdateName "A" "Alpha"
+          in
+            Expect.equal result (Result.Ok expected)
+      ]
     ]

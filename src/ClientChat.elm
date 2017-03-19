@@ -9,6 +9,7 @@ module ClientChat exposing
   , OutputMsg(ClientPost, ClientUpdateName)
   , posts
   , userNames
+  , encodeMessage
   , decodeInit
   , decodeMessage
   )
@@ -113,13 +114,23 @@ update message model =
 
 -- Encoding
 
--- encodeValue : String -> String -> String
--- encodeValue kind value =
---   Encode.object
---     [ ("type", Encode.string kind)
---     , ("value", Encode.string value)
---     ]
---   |> Encode.encode 2
+encodeMessage : OutputMsg -> String
+encodeMessage message =
+  let
+    object =
+      case message of
+        ClientPost post ->
+          Encode.object
+            [ ("type", Encode.string "Post")
+            , ("post", Encode.string post)
+            ]
+        ClientUpdateName name ->
+          Encode.object
+            [ ("type", Encode.string "UpdateName")
+            , ("name", Encode.string name)
+            ]
+  in
+    Encode.encode 2 object
 
 
 

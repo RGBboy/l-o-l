@@ -123,12 +123,16 @@ tests =
             Expect.true "Contains ABC" (Set.member "ABC" newModel.users)
       ]
     , describe ".update ServerPost"
-      [ test "updates posts" <|
-        \() ->
-          let
-            newModel = update (ServerPost "A" "new message") initModel
-          in
-            Expect.contain ("A", "new message") newModel.posts
+      [ test "adds post to posts and removes from optimisticPosts" <|
+        let
+          (postModel, _) = post "new message" initModel
+          newModel = update (ServerPost "A" "new message") postModel
+        in
+          Expect.all
+          [ \() -> Expect.contain ("A", "new message") newModel.posts
+          , \() -> Expect.equal (List.length postModel.optimisticPosts) 1
+          , \() -> Expect.equal (List.length newModel.optimisticPosts) 0
+          ]
       ]
     , describe ".update ServerUpdateName"
       [ test "updates userNames" <|

@@ -83,33 +83,21 @@ update message model =
     ServerPost id post ->
       { model
       | posts = (id, post) :: model.posts
+      , optimisticPosts = removeFirst ((==) (id, post)) model.optimisticPosts
       }
     ServerUpdateName id name ->
       { model
       | userNames = Dict.insert id name model.userNames
       }
-      -- let
-      --   chat = Debug.log "CHAT" (Chat.update message model.chat)
-      --   optimisticPosts =
-      --     case message of
-      --       Chat.Post socket post ->
-      --         removeFirst ((==) (socket, post)) model.optimisticPosts
-      --       _ -> model.optimisticPosts
-      -- in
-      --   ( { model
-      --     | chat = chat
-      --     , optimisticPosts = optimisticPosts
-      --     }
-      --   , Nothing
-      --   )
 
--- removeFirst : (a -> Bool) -> List a -> List a
--- removeFirst predicate list =
---   let
---     (h, t) = ListExtra.break predicate list
---     tail = Maybe.withDefault [] (List.tail t)
---   in
---     List.append h tail
+removeFirst : (a -> Bool) -> List a -> List a
+removeFirst predicate list =
+  let
+    (h, t) = ListExtra.break predicate list
+    tail = Maybe.withDefault [] (List.tail t)
+  in
+    List.append h tail
+
 
 
 -- Encoding

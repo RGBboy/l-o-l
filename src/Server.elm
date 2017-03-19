@@ -11,6 +11,7 @@ import Json.Decode.Pipeline exposing (decode, required)
 import Json.Encode as Encode
 
 import Navigation exposing (Location)
+import UrlParser
 
 import ServerChat
 
@@ -46,8 +47,12 @@ init =
   (ServerChat.init, Cmd.none)
 
 onConnection : Socket -> Location -> ServerChat.InputMsg
-onConnection socket _ =
-  ServerChat.Connection socket "ABC" -- change to figure out secret from Location
+onConnection socket location =
+  let
+    secret = UrlParser.parsePath UrlParser.string location
+      |> Maybe.withDefault ""
+  in
+    ServerChat.Connection socket secret
 
 onDisconnection : Socket -> Location -> ServerChat.InputMsg
 onDisconnection socket _ =

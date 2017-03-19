@@ -95,14 +95,14 @@ msgTypeDecoder config kind =
 decodeLocation : Decoder Location
 decodeLocation =
   decode Location
-    |> required "protocol" Decode.string
-    |> required "hash" Decode.string
-    |> required "search" Decode.string
-    |> required "pathname" Decode.string
-    |> required "port_" Decode.string
-    |> required "hostname" Decode.string
-    |> required "host" Decode.string
-    |> required "origin" Decode.string
     |> required "href" Decode.string
+    |> required "host" Decode.string
+    |> required "hostname" Decode.string
+    |> required "protocol" Decode.string
+    |> required "origin" Decode.string
+    |> required "port_" Decode.string
+    |> required "pathname" Decode.string
+    |> required "search" Decode.string
+    |> required "hash" Decode.string
     |> required "username" Decode.string
     |> required "password" Decode.string

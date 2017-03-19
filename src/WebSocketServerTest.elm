@@ -10,7 +10,7 @@ import Navigation exposing (Location)
 import WebSocketServer exposing (..)
 
 location : Location
-location = (Location "ws:" "" "" "/123" "8080" "localhost" "localhost:8080" "ws://localhost:8080" "ws://localhost:8080/123" "" "")
+location = (Location "ws://localhost:8080/123" "localhost:8080" "localhost" "ws:" "ws://localhost:8080" "8080" "/123" "" "" "" "")
 
 connectionJSON : String
 connectionJSON = """

@@ -182,13 +182,13 @@ encodeOutputMsg message =
       Encode.object
         [ ("type", Encode.string "UpdateName")
         , ("id", Encode.string connection)
-        , ("value", Encode.string name)
+        , ("name", Encode.string name)
         ]
     OutputPost connection message ->
       Encode.object
         [ ("type", Encode.string "Post")
         , ("id", Encode.string connection)
-        , ("value", Encode.string message)
+        , ("post", Encode.string message)
         ]
 
 
@@ -203,8 +203,10 @@ decodeInputMsg connection =
 decodeInputMsgType : Connection -> String -> Decoder InputMsg
 decodeInputMsgType connection kind =
   case kind of
-    "UpdateName" ->
-      Decode.map (UpdateName connection) Decode.string
     "Post" ->
-      Decode.map (Post connection) Decode.string
+      decode (Post connection)
+        |> required "post" Decode.string
+    "UpdateName" ->
+      decode (UpdateName connection)
+        |> required "name" Decode.string
     _ -> Decode.fail "Could not decode Msg"

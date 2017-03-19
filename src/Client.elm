@@ -19,7 +19,7 @@ import Time exposing (Time)
 
 import Json.Decode as Decode exposing (Decoder)
 
-import ClientChat as Chat
+import ClientChat exposing (Public)
 
 
 
@@ -36,15 +36,11 @@ main =
 
 -- MODEL
 
-type Status
-  = Disconnected
-  | Connected
-
 type alias Model =
-  { chat: Chat.Model
-  , input: String
-  , name: String
-  , status: Status
+  { chat: Maybe ClientChat.Model
+  , inputPost: String
+  , inputName: String
+  , inputSecret: String
   , server: String
   , secret: Maybe String
   , time: Time
@@ -52,10 +48,10 @@ type alias Model =
 
 initModel : String -> Model
 initModel server =
-  { chat = Chat.init server
-  , input = ""
-  , name = ""
-  , status = Disconnected
+  { chat = Nothing
+  , inputPost = ""
+  , inputName = ""
+  , inputSecret = ""
   , server = server
   , secret = Nothing
   , time = 0
@@ -72,64 +68,89 @@ init server =
 -- UPDATE
 
 type Msg
-  = InputMessage String
-  | Send
+  = InputPost String
+  | SubmitPost
   | InputName String
-  | Connect
-  | Disconnect
-  | ServerMessage String
+  | SubmitName
+  | InputSecret String
+  | SubmitSecret
+  | ServerInit ClientChat.Model
+  | ServerMessage ClientChat.InputMsg
   | Tick Time
   | Noop
 
-update : Msg -> Model -> (Model, Cmd Msg)
+sendMessage : Model -> ClientChat.OutputMsg -> Cmd msg
+sendMessage model message =
+  let
+    encodedMessage = ClientChat.encodeMessage message
+  in
+    Maybe.map (\secret -> WebSocket.send (model.server ++ secret) encodedMessage) model.secret
+      |> Maybe.withDefault Cmd.none
+
+
+
+submitPost : Model -> ClientChat.Model -> (Model, Cmd msg)
+submitPost model chat =
+  let
+    (newChat, message) = ClientChat.post model.inputPost chat
+  in
+    ( { model
+      | inputPost = ""
+      , chat = Just newChat
+      }
+    , sendMessage model message
+    )
+
+submitName : Model -> ClientChat.Model -> (Model, Cmd msg)
+submitName model chat =
+  let
+    (newChat, message) = ClientChat.updateName model.inputName chat
+  in
+    ( { model
+      | chat = Just newChat
+      }
+    , sendMessage model message
+    )
+
+update : Msg -> Model -> (Model, Cmd msg)
 update message model =
   case message of
-    InputMessage value ->
-      ( { model | input = value }
+    InputPost value ->
+      ( { model | inputPost = value }
       , Cmd.none
       )
-    Send ->
-      let
-        (chat, cmd) = (Chat.update (Chat.ClientPost model.input) model.chat)
-      in
-        ( { model
-          | input = ""
-          , chat = chat
-          }
-        , cmd
-        )
+    SubmitPost ->
+      Maybe.map (submitPost model) model.chat
+        |> Maybe.withDefault (model, Cmd.none)
     InputName value ->
-      ( { model | name = value }
+      ( { model | inputName = value }
       , Cmd.none
       )
-    Connect ->
-      let
-        (chat, cmd) = (Chat.update (Chat.ClientJoin model.name) model.chat)
-      in
-        ( { model
-          | chat = chat
-          , name = ""
-          , status = Connected
-          }
-        , cmd
-        )
-    Disconnect ->
+    SubmitName ->
+      Maybe.map (submitName model) model.chat
+        |> Maybe.withDefault (model, Cmd.none)
+    InputSecret value ->
+      ( { model | inputSecret = value }
+      , Cmd.none
+      )
+    SubmitSecret ->
+      ( { model | secret = Just model.inputSecret }
+      , Cmd.none
+      )
+    ServerInit chat ->
+      ( { model | chat = Just chat }
+      , Cmd.none
+      )
+    ServerMessage serverMessage ->
       ( { model
-        | status = Disconnected
+        | chat = Maybe.map (ClientChat.update serverMessage) model.chat
         }
       , Cmd.none
       )
-    -- Message message ->
-    --   let
-    --     (chat, cmd) = Chat.update message model.chat
-    --   in
-    --     ( { model | chat = chat }
-    --     , cmd
-    --     )
-    Tick time ->
-      ( { model | time = time }
-      , Cmd.none
-      )
+    -- Tick time ->
+    --   ( { model | time = time }
+    --   , Cmd.none
+    --   )
     _ -> (model, Cmd.none)
 
 
@@ -146,38 +167,35 @@ update message model =
 --   else
 --     Time.every (100 * Time.millisecond) Tick
 
+decodeInit : String -> Msg
+decodeInit value =
+  Decode.decodeString ClientChat.decodeInit value
+    |> Result.map ServerInit
+    |> Result.withDefault Noop
+
+decodeMessage : String -> Msg
+decodeMessage value =
+  Decode.decodeString ClientChat.decodeMessage value
+    |> Result.map ServerMessage
+    |> Result.withDefault Noop
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Maybe.map (\secret -> WebSocket.listen (model.server ++ "/" ++ secret) ServerMessage) model.secret
-    |> Maybe.withDefault Sub.none
+  let
+    tagger = Maybe.map (always decodeMessage) model.chat
+      |> Maybe.withDefault decodeInit
+  in
+    Maybe.map (\secret -> WebSocket.listen (model.server ++ secret) tagger) model.secret
+      |> Maybe.withDefault Sub.none
 
 
 
 -- VIEW
 
-connectionView : Dict Socket String -> Socket -> Html Msg
-connectionView names socket =
+postView : Dict Public String -> (Public, String) -> Html Msg
+postView users (id, post) =
   let
-    name = Maybe.withDefault "Unknown" (Dict.get socket names)
-  in
-    H.div []
-      [ H.span []
-          [ H.text name
-          ]
-      ]
-
-connectionsView : Chat.Model -> Html Msg
-connectionsView chat =
-  let
-    users = Chat.users chat
-    connections = Chat.connections chat
-  in
-    H.div [] (List.map (connectionView users) (Set.toList connections))
-
-postView : Dict Socket String -> (Socket, String) -> Html Msg
-postView users (socket, post) =
-  let
-    name = Maybe.withDefault "Unknown" (Dict.get socket users)
+    name = Maybe.withDefault "Unknown" (Dict.get id users)
   in
     H.div []
       [ H.span
@@ -194,11 +212,11 @@ postView users (socket, post) =
           [ H.text post ]
       ]
 
-postsView : Chat.Model -> Html Msg
+postsView : ClientChat.Model -> Html Msg
 postsView chat =
   let
-    posts = Chat.posts chat
-    users = Chat.users chat
+    posts = ClientChat.posts chat
+    users = ClientChat.userNames chat
   in
     H.div
       [ A.class "flex h4 pa2 overflow-container"
@@ -215,20 +233,29 @@ is13 : a -> Int -> Decoder a
 is13 a code =
   if code == 13 then Decode.succeed a else Decode.fail "not the right key code"
 
-connectedView : Model -> Html Msg
-connectedView model =
+connectedView : Model -> ClientChat.Model -> Html Msg
+connectedView model chat =
   H.div
     [ A.class "ba b--light-gray" ]
-    [ postsView model.chat
+    [ postsView chat
     , H.div
         [ A.class "w-100 bt b--light-gray" ]
         [ H.input
           [ A.class "w-100 pa2 bw0"
           , A.type_ "text"
           , A.placeholder "Message..."
-          , A.value model.input
-          , E.onInput InputMessage
-          , onEnter Send
+          , A.value model.inputPost
+          , E.onInput InputPost
+          , onEnter SubmitPost
+          ]
+          []
+        , H.input
+          [ A.class "w-100 pa2 bw0"
+          , A.type_ "text"
+          , A.placeholder "Name..."
+          , A.value model.inputName
+          , E.onInput InputName
+          , onEnter SubmitName
           ]
           []
         ]
@@ -241,10 +268,10 @@ disconnectedView model =
     [ H.input
         [ A.class "w-100 pa2 tc"
         , A.type_ "text"
-        , A.placeholder "Name..."
-        , A.value model.name
-        , E.onInput InputName
-        , onEnter Connect
+        , A.placeholder "Secret..."
+        , A.value model.inputSecret
+        , E.onInput InputSecret
+        , onEnter SubmitSecret
         ]
         []
     ]
@@ -252,10 +279,8 @@ disconnectedView model =
 view : Model -> Html Msg
 view model =
   let
-    subview =
-      case model.status of
-        Connected -> connectedView model
-        Disconnected -> disconnectedView model
+    subview = Maybe.map (connectedView model) model.chat
+      |> Maybe.withDefault (disconnectedView model)
     frame = ((Time.inMilliseconds model.time) / 100 |> round |> (%)) 50
     title =
       case frame of

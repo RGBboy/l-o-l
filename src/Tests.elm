@@ -4,7 +4,6 @@ import Test exposing (Test, describe)
 import Test.Runner.Node exposing (run, TestProgram)
 import Json.Encode exposing (Value)
 
-import WebSocketServerTest
 import ServerChatTest
 import ClientChatTest
 --import ClientTest
@@ -13,8 +12,7 @@ import ClientChatTest
 all : Test
 all =
   describe "l-o-l"
-    [ WebSocketServerTest.tests
-    , ServerChatTest.tests
+    [ ServerChatTest.tests
     , ClientChatTest.tests
     --, ClientTest.tests
     ]

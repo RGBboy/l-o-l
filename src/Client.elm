@@ -10,7 +10,6 @@ import Html as H exposing (Html)
 import Html.Attributes as A
 import Html.Events as E
 import WebSocket
-import WebSocketServer exposing (Socket)
 
 import Set exposing (Set)
 import Dict exposing (Dict)

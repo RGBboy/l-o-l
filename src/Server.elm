@@ -46,21 +46,25 @@ init : (Model, Cmd msg)
 init =
   (ServerChat.init, Cmd.none)
 
-onConnection : Socket -> Location -> ServerChat.InputMsg
+onConnection : Socket -> Location -> Msg
 onConnection socket location =
   let
     secret = UrlParser.parsePath UrlParser.string location
       |> Maybe.withDefault ""
   in
     ServerChat.Connection socket secret
+      |> ServerMsg
 
-onDisconnection : Socket -> Location -> ServerChat.InputMsg
+onDisconnection : Socket -> Location -> Msg
 onDisconnection socket _ =
   ServerChat.Disconnection socket
+    |> ServerMsg
 
-onMessage : Socket -> Location -> Decoder ServerChat.InputMsg
-onMessage socket _ =
-  ServerChat.decodeInputMsg socket
+onMessage : Socket -> Location -> String -> Msg
+onMessage socket _ message =
+  Decode.decodeString (ServerChat.decodeInputMsg socket) message
+    |> Result.map ServerMsg
+    |> Result.withDefault Noop
 
 -- UPDATE
 
@@ -70,7 +74,7 @@ type Msg
 
 sendMessage : (Socket, ServerChat.OutputMsg) -> Cmd msg
 sendMessage (socket, message) =
-  sendToOne outputWSS (ServerChat.encodeOutputMsg message) socket
+  sendToOne outputWSS (Encode.encode 2 (ServerChat.encodeOutputMsg message)) socket
 
 sendMessages : List (Socket, ServerChat.OutputMsg) -> Cmd msg
 sendMessages messages =
@@ -93,7 +97,6 @@ update message model =
 
 -- SUBSCRIPTIONS
 
-decodeConfig : WSS.Config ServerChat.InputMsg
 decodeConfig =
   { onConnection = onConnection
   , onDisconnection = onDisconnection
@@ -103,7 +106,6 @@ decodeConfig =
 decodeMsg : Decode.Value -> Msg
 decodeMsg value =
   Decode.decodeValue (WSS.eventDecoder decodeConfig) value
-    |> Result.map ServerMsg
     |> Result.withDefault Noop
 
 subscriptions : Model -> Sub Msg

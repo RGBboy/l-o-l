@@ -10,12 +10,12 @@
   "private": true,
   "main": "./lib/server",
   "scripts": {
-    "start": "node ./lib/server",
     "bundle": "uglifyjs ./build/client.js -c warnings=false -m -o ./public/client.js",
     "build": "npm run build:client && npm run build:css && npm run build:server && npm run bundle",
     "build:css": "cp ./node_modules/tachyons/css/tachyons.min.css ./public/tachyons.min.css",
     "build:client": "elm-make ./src/Client.elm --output ./build/client.js",
     "build:server": "elm-make ./src/Server.elm --output ./build/server.js",
+    "start": "node ./lib/server",
     "test": "elm-test src/Tests.elm"
   },
   "dependencies": {

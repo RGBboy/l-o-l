@@ -6,7 +6,7 @@ import Json.Encode exposing (Value)
 
 import ServerChatTest
 import ClientChatTest
---import ClientTest
+import ClientTest
 
 
 all : Test
@@ -14,7 +14,7 @@ all =
   describe "l-o-l"
     [ ServerChatTest.tests
     , ClientChatTest.tests
-    --, ClientTest.tests
+    , ClientTest.tests
     ]
 
 

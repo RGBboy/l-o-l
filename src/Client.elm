@@ -4,6 +4,8 @@ module Client exposing
   , init
   , Msg( ServerMessage )
   , subscriptions
+  , decodeInit
+  , decodeMessage
   )
 
 import Html as H exposing (Html)
@@ -85,8 +87,6 @@ sendMessage model message =
   in
     Maybe.map (\secret -> WebSocket.send (model.server ++ secret) encodedMessage) model.secret
       |> Maybe.withDefault Cmd.none
-
-
 
 submitPost : Model -> ClientChat.Model -> (Model, Cmd msg)
 submitPost model chat =

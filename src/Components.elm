@@ -1,5 +1,7 @@
 module Components exposing
-  ( column
+  ( box
+  , center
+  , column
   , hr
   , input
   , inputCenter
@@ -42,6 +44,9 @@ unit3 = baseUnit * 4
 
 unit4 : Float
 unit4 = baseUnit * 8
+
+unit5 : Float
+unit5 = baseUnit * 16
 
 unit6 : Float
 unit6 = baseUnit * 32
@@ -86,32 +91,35 @@ stylesheet =
   Style.styleSheet
     [ Style.style () [] ]
 
-layout : List (El.Element () variation msg) -> Html msg
-layout children =
-  El.layout stylesheet
-    <| El.row ()
-        [ A.inlineStyle [ sanSerif ] -- should probably put this local to the given component
-        , A.center
-        , A.verticalCenter
+layout : El.Element () variation msg -> Html msg
+layout child =
+  El.layout stylesheet child
+
+center : El.Element () variation msg -> El.Element () variation msg
+center child =
+  El.row ()
+    [ A.inlineStyle [ sanSerif ] -- should probably put this local to the given component
+    , A.center
+    , A.verticalCenter
+    , A.width A.fill
+    , A.height A.fill
+    ]
+    [ El.column ()
+        [ A.height A.fill
+        , A.maxHeight (unit5|> A.px)
         , A.width A.fill
-        , A.height A.fill
-        ]
-        [ El.column ()
-            [ A.spacingXY 0 unit1
-            , A.width A.fill
-            , A.maxWidth (unit6 |> A.px)
-            , A.inlineStyle
-                [ ( "margin", "auto" )
-                ]
+        , A.maxWidth (unit6 |> A.px)
+        , A.inlineStyle
+            [ ( "margin", "auto" )
             ]
-            children
         ]
+        [ child ]
+    ]
 
 post : (String, String) -> El.Element () variation msg
 post (username, message) =
   El.textLayout ()
-    [ A.padding unitHalf
-    ]
+    []
     [ El.el ()
         [ A.inlineStyle [ bold, fontSize6, color midGray ] ]
         <| El.text (username ++ ":")
@@ -120,15 +128,17 @@ post (username, message) =
         [ El.text message ]
     ]
 
-posts : List (String, String) -> El.Element () variation msg
-posts messages =
-  El.column ()
-    [ A.class "TEST"
-    , A.height (unit4 |> A.px)
+posts : String -> List (String, String) -> El.Element () variation msg
+posts id messages =
+  El.el ()
+    [ A.id id
     , A.scrollbars
-    , A.inlineStyle [ ("flex-direction", "column-reverse") ] -- not sure how to do this with style elements
     ]
-    <| List.map post messages
+    <| El.column ()
+      [ A.spacingXY 0 unit1
+      , A.clip
+      ]
+      <| List.map post messages
 
 onEnter : msg -> El.Attribute variation msg
 onEnter message =
@@ -181,12 +191,25 @@ title value =
 
 column : List (El.Element () variation msg) -> El.Element () variation msg
 column children =
-  El.column () []
-    children
-
-panel : List (El.Element () variation msg) -> El.Element () variation msg
-panel children =
   El.column ()
-    [ A.inlineStyle [ borderColor lightGray, borderWidthPin ]
+    [ A.height A.content
+    , A.width A.content
     ]
     children
+
+panel : El.Element () variation msg -> El.Element () variation msg
+panel child =
+  El.column ()
+    [ A.inlineStyle [ borderColor lightGray, borderWidthPin ]
+    , A.height A.content
+    , A.width A.content
+    ]
+    [ child ]
+
+box : Float -> String -> El.Element () variation msg
+box height color =
+  El.el ()
+    [ A.height (height |> A.px)
+    , A.inlineStyle [ ( "background-color", color ) ]
+    ]
+    El.empty

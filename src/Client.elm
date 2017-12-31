@@ -8,21 +8,20 @@ module Client exposing
   , decodeMessage
   )
 
+import ClientChat exposing (Public)
 import Components as C
+import Dict exposing (Dict)
+import Dom.Scroll as Scroll
 import Element as El
 import Html as H exposing (Html)
 import Html.Attributes as A
 import Html.Events as E
-import WebSocket
-
-import Set exposing (Set)
-import Dict exposing (Dict)
-import Result exposing (Result)
-import Time exposing (Time)
-
 import Json.Decode as Decode exposing (Decoder)
-
-import ClientChat exposing (Public)
+import Result exposing (Result)
+import Set exposing (Set)
+import Task
+import Time exposing (Time)
+import WebSocket
 
 
 
@@ -113,7 +112,12 @@ submitName model chat =
     , sendMessage model message
     )
 
-update : Msg -> Model -> (Model, Cmd msg)
+scrollToLatestPost : Cmd Msg
+scrollToLatestPost =
+  Scroll.toBottom "posts"
+    |> Task.attempt (always Noop)
+
+update : Msg -> Model -> (Model, Cmd Msg)
 update message model =
   case message of
     InputPost value ->
@@ -121,8 +125,12 @@ update message model =
       , Cmd.none
       )
     SubmitPost ->
-      Maybe.map (submitPost model) model.chat
-        |> Maybe.withDefault (model, Cmd.none)
+      let
+        (newModel, command) =
+          Maybe.map (submitPost model) model.chat
+            |> Maybe.withDefault (model, Cmd.none)
+      in
+        (newModel, Cmd.batch [ command, scrollToLatestPost ])
     InputName value ->
       ( { model | inputName = value }
       , Cmd.none
@@ -140,7 +148,7 @@ update message model =
       )
     ServerInit chat ->
       ( { model | chat = Just chat }
-      , Cmd.none
+      , scrollToLatestPost
       )
     ServerMessage serverMessage ->
       ( { model
@@ -196,18 +204,18 @@ subscriptions model =
 connectedView : String -> String -> List (String, String) -> El.Element () variation Msg
 connectedView inputPost inputName posts =
   C.panel
-    [ C.posts posts
-    , C.hr
-    , C.input SubmitPost InputPost "Message" inputPost
-    , C.hr
-    , C.input SubmitName InputName "Name" inputName
-    ]
+    <| C.column
+      [ C.posts "posts" posts
+      , C.hr
+      , C.input SubmitPost InputPost "Message" inputPost
+      , C.hr
+      , C.input SubmitName InputName "Name" inputName
+      ]
 
 disconnectedView : String -> El.Element () variation Msg
 disconnectedView inputSecret =
   C.panel
-    [ C.inputCenter SubmitSecret InputSecret "Secret" inputSecret
-    ]
+    <| C.inputCenter SubmitSecret InputSecret "Secret" inputSecret
 
 collectUsersPosts : Dict Public String -> (Public, String) -> List (String, String) -> List (String, String)
 collectUsersPosts users (id, post) acc =
@@ -222,7 +230,7 @@ usersPosts chat =
     posts = ClientChat.posts chat
     users = ClientChat.userNames chat
   in
-    List.foldr (collectUsersPosts users) [] posts
+    List.foldl (collectUsersPosts users) [] posts
 
 view : Model -> Html Msg
 view model =
@@ -239,6 +247,8 @@ view model =
         _ -> "l-o-l"
   in
     C.layout
-      [ C.title title
-      , content
-      ]
+      <| C.center
+      <| C.column
+        [ C.title title
+        , content
+        ]

@@ -4,15 +4,18 @@
   <meta charset="UTF-8">
   <title>l-o-l</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>html { width:100%; height: 100%; }</style>
-  <link rel="stylesheet" href="/tachyons.min.css">
+  <style>
+    html, body, .style-elements {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+  </style>
 </head>
-<body class="w-100 h-100 sans-serif">
-  <div id="mount" class="h-100 w-100"></div>
+<body>
   <script src="client.js"></script>
   <script>
-    Elm.Client.embed(
-      document.getElementById('mount'),
+    Elm.Client.fullscreen(
       window.location.href.replace('http', 'ws')
     );
   </script>

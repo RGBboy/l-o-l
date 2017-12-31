@@ -8,6 +8,8 @@ module Client exposing
   , decodeMessage
   )
 
+import Components as C
+import Element as El
 import Html as H exposing (Html)
 import Html.Attributes as A
 import Html.Events as E
@@ -191,95 +193,43 @@ subscriptions model =
 
 -- VIEW
 
-postView : Dict Public String -> (Public, String) -> Html Msg
-postView users (id, post) =
+connectedView : String -> String -> List (String, String) -> El.Element () variation Msg
+connectedView inputPost inputName posts =
+  C.panel
+    [ C.posts posts
+    , C.hr
+    , C.input SubmitPost InputPost "Message" inputPost
+    , C.hr
+    , C.input SubmitName InputName "Name" inputName
+    ]
+
+disconnectedView : String -> El.Element () variation Msg
+disconnectedView inputSecret =
+  C.panel
+    [ C.inputCenter SubmitSecret InputSecret "Secret" inputSecret
+    ]
+
+collectUsersPosts : Dict Public String -> (Public, String) -> List (String, String) -> List (String, String)
+collectUsersPosts users (id, post) acc =
   let
     name = Maybe.withDefault "Unknown" (Dict.get id users)
   in
-    H.div []
-      [ H.span
-          [ A.class "db f6 b mt2 mb1 mid-gray"
-          , A.style [ ("word-break", "break-all") ] -- tachyons has a bug, no word-break for now
-          ]
-          [ H.text name
-          , H.text ":"
-          ]
-      , H.span
-          [ A.class "db pl2"
-          , A.style [ ("word-break", "break-all") ] -- tachyons has a bug, no word-break for now
-          ]
-          [ H.text post ]
-      ]
+    (name, post) :: acc
 
-postsView : ClientChat.Model -> Html Msg
-postsView chat =
+usersPosts : ClientChat.Model -> List (String, String)
+usersPosts chat =
   let
     posts = ClientChat.posts chat
     users = ClientChat.userNames chat
   in
-    H.div
-      [ A.class "flex h4 pa2 overflow-container"
-      , A.style [ ("flex-direction", "column-reverse") ] -- tachyons doesn't have flex reverse
-      ]
-      (List.map (postView users) posts)
-
-onEnter : Msg -> H.Attribute Msg
-onEnter message =
-    E.on "keydown"
-      (E.keyCode |> Decode.andThen (is13 message))
-
-is13 : a -> Int -> Decoder a
-is13 a code =
-  if code == 13 then Decode.succeed a else Decode.fail "not the right key code"
-
-connectedView : Model -> ClientChat.Model -> Html Msg
-connectedView model chat =
-  H.div
-    [ A.class "ba b--light-gray" ]
-    [ postsView chat
-    , H.div
-        [ A.class "w-100 bt b--light-gray" ]
-        [ H.input
-          [ A.class "w-100 pa2 bw0"
-          , A.type_ "text"
-          , A.placeholder "Message..."
-          , A.value model.inputPost
-          , E.onInput InputPost
-          , onEnter SubmitPost
-          ]
-          []
-        , H.input
-          [ A.class "w-100 pa2 bw0"
-          , A.type_ "text"
-          , A.placeholder "Name..."
-          , A.value model.inputName
-          , E.onInput InputName
-          , onEnter SubmitName
-          ]
-          []
-        ]
-    ]
-
-disconnectedView : Model -> Html Msg
-disconnectedView model =
-  H.div
-    [ A.class "w-50 center" ]
-    [ H.input
-        [ A.class "w-100 pa2 tc"
-        , A.type_ "text"
-        , A.placeholder "Secret..."
-        , A.value model.inputSecret
-        , E.onInput InputSecret
-        , onEnter SubmitSecret
-        ]
-        []
-    ]
+    List.foldr (collectUsersPosts users) [] posts
 
 view : Model -> Html Msg
 view model =
   let
-    subview = Maybe.map (connectedView model) model.chat
-      |> Maybe.withDefault (disconnectedView model)
+    posts = Maybe.map usersPosts model.chat
+    content = Maybe.map (connectedView model.inputPost model.inputName) posts
+      |> Maybe.withDefault (disconnectedView model.inputSecret)
     frame = ((Time.inMilliseconds model.time) / 100 |> round |> (%)) 50
     title =
       case frame of
@@ -288,13 +238,7 @@ view model =
         1 -> "l-•-l"
         _ -> "l-o-l"
   in
-    H.div
-      [ A.class "flex flex-column justify-center h-100 mw6 center" ]
-      [ H.div
-          [ A.class "flex flex-column h5 " ]
-          [ H.h1
-              [ A.class "f2 tc mb2" ]
-              [ H.text title ]
-          , subview
-          ]
+    C.layout
+      [ C.title title
+      , content
       ]

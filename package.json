@@ -11,20 +11,19 @@
   "main": "./lib/server",
   "scripts": {
     "bundle": "uglifyjs ./build/client.js -c warnings=false -m -o ./public/client.js",
-    "build": "npm run build:client && npm run build:css && npm run build:server && npm run bundle",
-    "build:css": "cp ./node_modules/tachyons/css/tachyons.min.css ./public/tachyons.min.css",
+    "build": "npm run build:client && npm run build:server && npm run bundle",
     "build:client": "elm-make ./src/Client.elm --output ./build/client.js",
     "build:server": "elm-make ./src/Server.elm --output ./build/server.js",
+    "dev": "npm start & chokidar 'src/**/*.elm' -c 'npm run build'",
     "start": "node ./lib/server",
     "test": "elm-test src/Tests.elm"
   },
   "dependencies": {
     "ecstatic": "^3.1.1",
-    "elm-websocket-server": "^1.0.0",
-    "lodash": "^4.3.0",
-    "tachyons": "^4.5.4"
+    "elm-websocket-server": "^1.0.1"
   },
   "devDependencies": {
+    "chokidar-cli": "^1.2.0",
     "elm": "^0.18.0",
     "elm-test": "^0.18.2",
     "uglify-js": "^2.6.1"

@@ -25,7 +25,7 @@
   "devDependencies": {
     "chokidar-cli": "^1.2.0",
     "elm": "^0.18.0",
-    "elm-test": "^0.18.2",
+    "elm-test": "0.18.2",
     "uglify-js": "^2.6.1"
   },
   "license": "ISC"

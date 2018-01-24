@@ -9,9 +9,9 @@ module Client exposing
   )
 
 import ClientChat exposing (Public)
+import Color
 import Components as C
 import Dict exposing (Dict)
-import Dom.Scroll as Scroll
 import Element as El
 import Html as H exposing (Html)
 import Html.Attributes as A
@@ -112,11 +112,6 @@ submitName model chat =
     , sendMessage model message
     )
 
-scrollToLatestPost : Cmd Msg
-scrollToLatestPost =
-  Scroll.toBottom "posts"
-    |> Task.attempt (always Noop)
-
 update : Msg -> Model -> (Model, Cmd Msg)
 update message model =
   case message of
@@ -125,12 +120,8 @@ update message model =
       , Cmd.none
       )
     SubmitPost ->
-      let
-        (newModel, command) =
-          Maybe.map (submitPost model) model.chat
-            |> Maybe.withDefault (model, Cmd.none)
-      in
-        (newModel, Cmd.batch [ command, scrollToLatestPost ])
+      Maybe.map (submitPost model) model.chat
+        |> Maybe.withDefault (model, Cmd.none)
     InputName value ->
       ( { model | inputName = value }
       , Cmd.none
@@ -148,7 +139,7 @@ update message model =
       )
     ServerInit chat ->
       ( { model | chat = Just chat }
-      , scrollToLatestPost
+      , Cmd.none
       )
     ServerMessage serverMessage ->
       ( { model
@@ -201,18 +192,18 @@ subscriptions model =
 
 -- VIEW
 
-connectedView : String -> String -> List (String, String) -> El.Element () variation Msg
+connectedView : String -> String -> List (String, String) -> El.Element Msg
 connectedView inputPost inputName posts =
   C.panel
     <| C.column
-      [ C.posts "posts" posts
-      , C.hr
-      , C.input SubmitPost InputPost "Message" inputPost
-      , C.hr
-      , C.input SubmitName InputName "Name" inputName
-      ]
+        [ C.posts posts
+        , C.hr
+        , C.input SubmitPost InputPost "Message" inputPost
+        , C.hr
+        , C.input SubmitName InputName "Name" inputName
+        ]
 
-disconnectedView : String -> El.Element () variation Msg
+disconnectedView : String -> El.Element Msg
 disconnectedView inputSecret =
   C.panel
     <| C.inputCenter SubmitSecret InputSecret "Secret" inputSecret
@@ -247,8 +238,6 @@ view model =
         _ -> "l-o-l"
   in
     C.layout
-      <| C.center
-      <| C.column
-        [ C.title title
-        , content
-        ]
+      [ C.title title
+      , content
+      ]
